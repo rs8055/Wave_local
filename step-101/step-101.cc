@@ -298,7 +298,7 @@ namespace Step101
     , final_time(1.0)     
     , timestep_number(0)
     , theta(0.0)
-    , lin_solver_type("ilu")
+    , lin_solver_type("direct")
   {}
 
 
@@ -335,7 +335,7 @@ namespace Step101
 
     const auto partitioner = std::make_shared<const Utilities::MPI::Partitioner>(
       level_set_dof_handler.locally_owned_dofs(),
-      DoFTools::extract_locally_active_dofs(level_set_dof_handler),
+      DoFTools::extract_locally_relevant_dofs(level_set_dof_handler),
       level_set_dof_handler.get_mpi_communicator());
     level_set.reinit(partitioner);
 
@@ -343,6 +343,7 @@ namespace Step101
     VectorTools::interpolate(level_set_dof_handler,
                              signed_distance_sphere,
                              level_set);
+    level_set.update_ghost_values();
   }
 
 
@@ -368,7 +369,8 @@ namespace Step101
     fe_collection.push_back(FE_Q<dim>(fe_degree));
     fe_collection.push_back(FE_Nothing<dim>());
 
-    for (const auto &cell : dof_handler.active_cell_iterators())
+    for (const auto &cell : dof_handler.active_cell_iterators() |
+           IteratorFilters::LocallyOwnedCell())
       {
         const NonMatching::LocationToLevelSet cell_location =
           mesh_classifier.location_to_level_set(cell);
@@ -513,6 +515,7 @@ namespace Step101
     // filter.
     for (const auto &cell :
          dof_handler.active_cell_iterators() |
+           IteratorFilters::LocallyOwnedCell() |
            IteratorFilters::ActiveFEIndexEqualTo(ActiveFEIndex::lagrange))
       {
         local_mass = 0;
@@ -710,7 +713,7 @@ namespace Step101
     if (theta < 1.0)
       {
         LinearAlgebra::distributed::Vector<double> tmp;
-        tmp.reinit(solution.size());
+        tmp.reinit(solution);
         stiffness_matrix.vmult(tmp, previous_solution);
         rhs.add(-1.0, tmp);
       }
@@ -739,7 +742,9 @@ namespace Step101
 
     for (const auto &cell :
          dof_handler.active_cell_iterators() |
+           IteratorFilters::LocallyOwnedCell() |
            IteratorFilters::ActiveFEIndexEqualTo(ActiveFEIndex::lagrange))
+      if(cell->is_locally_owned())
       {
         local_rhs = 0;
         const double cell_side_length = cell->minimum_vertex_distance();
@@ -808,6 +813,8 @@ namespace Step101
         rhs.add(local_dof_indices, local_rhs);
       }
 
+    rhs.compress(VectorOperation::add);
+
     //std::cout << "Solving system" << std::endl;
 
     if(lin_solver_type == "direct")
@@ -860,7 +867,7 @@ namespace Step101
 
     data_out.set_cell_selection(
       [this](const typename Triangulation<dim>::cell_iterator &cell) {
-        return cell->is_active() &&
+        return cell->is_active() && cell->is_locally_owned() &&
                mesh_classifier.location_to_level_set(cell) !=
                  NonMatching::LocationToLevelSet::outside;
       });
@@ -874,6 +881,8 @@ namespace Step101
   double WaveSolver<dim>::compute_L2_error() const
   {
     //std::cout << "Computing L2 error" << std::endl;
+
+    solution.update_ghost_values();
 
     const QGauss<1> quadrature_1D(fe_degree + 1);
 
@@ -897,6 +906,7 @@ namespace Step101
 
     for (const auto &cell :
          dof_handler.active_cell_iterators() |
+           IteratorFilters::LocallyOwnedCell() |
            IteratorFilters::ActiveFEIndexEqualTo(ActiveFEIndex::lagrange))
       {
         non_matching_fe_values.reinit(cell);
@@ -919,6 +929,11 @@ namespace Step101
               }
           }
       }
+
+
+    solution.zero_out_ghost_values();
+
+    error_L2_squared = Utilities::MPI::sum(error_L2_squared, dof_handler.get_mpi_communicator());
 
     return std::sqrt(error_L2_squared);
   }
@@ -946,8 +961,7 @@ namespace Step101
         triangulation.refine_global(1);
         time = 0.0;
         timestep_number = 0;
-        const double cell_side_length =
-          triangulation.begin_active()->minimum_vertex_distance();
+        const double cell_side_length = 4.0 / std::pow(2.0, 2 + 1 + cycle); // TODO
         time_step = (0.1)*std::pow(cell_side_length,1);
         setup_discrete_level_set();
         //std::cout << "Classifying cells" << std::endl;
@@ -1064,12 +1078,15 @@ namespace Step101
         prev_error = error_L2;
         prev_h = cell_side_length;
 
-        std::cout << std::endl;
+        //std::cout << std::endl;
         // std::cout << std::setprecision(6) << std::scientific;
         for (const std::string &col : {"Mesh size", "Time Step", "L2-Error", "Rate"})
           convergence_table.set_precision(col, 8);
+        if(Utilities::MPI::this_mpi_process(dof_handler.get_communicator())== 0)
+        {
         convergence_table.write_text(std::cout);
         std::cout << std::endl;
+        }
 
         
 
