@@ -1,0 +1,10 @@
+/home/ritesh/Downloads/Wave_Coding/step-101/CMakeFiles/step-101.dir
+/home/ritesh/Downloads/Wave_Coding/step-101/CMakeFiles/run.dir
+/home/ritesh/Downloads/Wave_Coding/step-101/CMakeFiles/debug.dir
+/home/ritesh/Downloads/Wave_Coding/step-101/CMakeFiles/release.dir
+/home/ritesh/Downloads/Wave_Coding/step-101/CMakeFiles/runclean.dir
+/home/ritesh/Downloads/Wave_Coding/step-101/CMakeFiles/distclean.dir
+/home/ritesh/Downloads/Wave_Coding/step-101/CMakeFiles/strip_comments.dir
+/home/ritesh/Downloads/Wave_Coding/step-101/CMakeFiles/info.dir
+/home/ritesh/Downloads/Wave_Coding/step-101/CMakeFiles/edit_cache.dir
+/home/ritesh/Downloads/Wave_Coding/step-101/CMakeFiles/rebuild_cache.dir

@@ -1,0 +1,10 @@
+/home/ritesh/Downloads/Wave_Coding/step-99/CMakeFiles/step-99.dir
+/home/ritesh/Downloads/Wave_Coding/step-99/CMakeFiles/run.dir
+/home/ritesh/Downloads/Wave_Coding/step-99/CMakeFiles/debug.dir
+/home/ritesh/Downloads/Wave_Coding/step-99/CMakeFiles/release.dir
+/home/ritesh/Downloads/Wave_Coding/step-99/CMakeFiles/runclean.dir
+/home/ritesh/Downloads/Wave_Coding/step-99/CMakeFiles/distclean.dir
+/home/ritesh/Downloads/Wave_Coding/step-99/CMakeFiles/strip_comments.dir
+/home/ritesh/Downloads/Wave_Coding/step-99/CMakeFiles/info.dir
+/home/ritesh/Downloads/Wave_Coding/step-99/CMakeFiles/edit_cache.dir
+/home/ritesh/Downloads/Wave_Coding/step-99/CMakeFiles/rebuild_cache.dir
