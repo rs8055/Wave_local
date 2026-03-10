@@ -51,6 +51,7 @@
 #include <deal.II/lac/solver_control.h>
 #include <deal.II/lac/sparse_matrix.h>
 #include <deal.II/lac/sparsity_pattern.h>
+#include <deal.II/lac/trilinos_precondition.h>
 #include <deal.II/lac/trilinos_solver.h>
 #include <deal.II/lac/trilinos_sparse_matrix.h>
 #include <deal.II/lac/trilinos_sparsity_pattern.h>
@@ -256,10 +257,15 @@ namespace Step101
 
     NonMatching::MeshClassifier<dim> mesh_classifier;
 
-    SparsityPattern      sparsity_pattern;
     TrilinosWrappers::SparseMatrix mass_matrix;
     TrilinosWrappers::SparseMatrix stiffness_matrix;
     TrilinosWrappers::SparseMatrix system_matrix;
+
+    TrilinosWrappers::PreconditionILU precondition_ilu;
+    TrilinosWrappers::PreconditionAMG precondition_amg;
+
+    TrilinosWrappers::SolverDirect solver_direct;
+
     LinearAlgebra::distributed::Vector<double>       rhs;
 
     double       time;
@@ -272,6 +278,8 @@ namespace Step101
     // theta = 0.5: Crank-Nicolson
     // theta = 1: Backward Euler (implicit, most stable)
     const double theta;
+
+    const std::string lin_solver_type;
   };
 
 
@@ -288,6 +296,7 @@ namespace Step101
     , final_time(1.0)     
     , timestep_number(0)
     , theta(0.0)
+    , lin_solver_type("ilu")
   {}
 
 
@@ -667,6 +676,13 @@ namespace Step101
     stiffness_matrix.compress(VectorOperation::add);
 
     system_matrix.copy_from(mass_matrix);
+
+    if(lin_solver_type == "direct")
+      solver_direct.initialize(system_matrix);
+    else if(lin_solver_type == "ilu")
+      precondition_ilu.initialize(system_matrix);
+    else if(lin_solver_type == "amg")
+      precondition_amg.initialize(system_matrix);
     // system_matrix.add(theta * time_step, stiffness_matrix);
   }
 
@@ -780,10 +796,23 @@ namespace Step101
 
     //std::cout << "Solving system" << std::endl;
 
-    const unsigned int max_iterations = 100 * solution.size();
-    ReductionControl      solver_control(max_iterations,1e-20,1e-10);
-    SolverCG<LinearAlgebra::distributed::Vector<double>>         solver(solver_control);
-    solver.solve(system_matrix, solution_out, rhs, PreconditionIdentity());
+    if(lin_solver_type == "direct")
+      {
+        solver_direct.solve(solution_out, rhs);
+      }
+    else
+      {
+        const unsigned int max_iterations = 100 * solution.size();
+        ReductionControl      solver_control(max_iterations,1e-20,1e-10);
+        SolverCG<LinearAlgebra::distributed::Vector<double>>         solver(solver_control);
+
+        if(lin_solver_type == "identity")
+          solver.solve(system_matrix, solution_out, rhs, PreconditionIdentity());
+        else if(lin_solver_type == "ilu")
+          solver.solve(system_matrix, solution_out, rhs, precondition_ilu);
+        else if(lin_solver_type == "amg")
+          solver.solve(system_matrix, solution_out, rhs, precondition_amg);
+      }
   }
 
 
