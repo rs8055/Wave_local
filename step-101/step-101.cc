@@ -51,6 +51,9 @@
 #include <deal.II/lac/solver_control.h>
 #include <deal.II/lac/sparse_matrix.h>
 #include <deal.II/lac/sparsity_pattern.h>
+#include <deal.II/lac/trilinos_solver.h>
+#include <deal.II/lac/trilinos_sparse_matrix.h>
+#include <deal.II/lac/trilinos_sparsity_pattern.h>
 #include <deal.II/lac/vector.h>
 
 #include <deal.II/numerics/data_out.h>
@@ -254,9 +257,9 @@ namespace Step101
     NonMatching::MeshClassifier<dim> mesh_classifier;
 
     SparsityPattern      sparsity_pattern;
-    SparseMatrix<double> mass_matrix;
-    SparseMatrix<double> stiffness_matrix;
-    SparseMatrix<double> system_matrix;
+    TrilinosWrappers::SparseMatrix mass_matrix;
+    TrilinosWrappers::SparseMatrix stiffness_matrix;
+    TrilinosWrappers::SparseMatrix system_matrix;
     LinearAlgebra::distributed::Vector<double>       rhs;
 
     double       time;
@@ -373,7 +376,9 @@ namespace Step101
       return this->face_has_ghost_penalty(cell, face_index);
     };
 
-    DynamicSparsityPattern dsp(dof_handler.n_dofs(), dof_handler.n_dofs());
+    TrilinosWrappers::SparsityPattern sparsity_pattern;
+    sparsity_pattern.reinit(dof_handler.locally_owned_dofs(),
+                            dof_handler.get_communicator());
 
     const unsigned int           n_components = fe_collection.n_components();
     Table<2, DoFTools::Coupling> cell_coupling(n_components, n_components);
@@ -385,14 +390,14 @@ namespace Step101
     const bool                      keep_constrained_dofs = true;
 
     DoFTools::make_flux_sparsity_pattern(dof_handler,
-                                         dsp,
+                                         sparsity_pattern,
                                          constraints,
                                          keep_constrained_dofs,
                                          cell_coupling,
                                          face_coupling,
                                          numbers::invalid_subdomain_id,
                                          face_has_flux_coupling);
-    sparsity_pattern.copy_from(dsp);
+    sparsity_pattern.compress();
 
     mass_matrix.reinit(sparsity_pattern);
     stiffness_matrix.reinit(sparsity_pattern);
@@ -658,6 +663,9 @@ namespace Step101
             }
       }
 
+    mass_matrix.compress(VectorOperation::add);
+    stiffness_matrix.compress(VectorOperation::add);
+
     system_matrix.copy_from(mass_matrix);
     // system_matrix.add(theta * time_step, stiffness_matrix);
   }
@@ -776,10 +784,6 @@ namespace Step101
     ReductionControl      solver_control(max_iterations,1e-20,1e-10);
     SolverCG<LinearAlgebra::distributed::Vector<double>>         solver(solver_control);
     solver.solve(system_matrix, solution_out, rhs, PreconditionIdentity());
-    // PreconditionSSOR<SparseMatrix<double>> preconditioner;
-    // // preconditioner.initialize(system_matrix, 1.2);
-    // preconditioner.initialize(system_matrix, 1.0);
-    // solver.solve(system_matrix, solution_out, rhs, preconditioner); 
   }
 
 
@@ -1023,8 +1027,10 @@ namespace Step101
 
 
 // @sect3{The main() function}
-int main()
+int main(int argc, char *argv[])
 {
+  dealii::Utilities::MPI::MPI_InitFinalize mpi_initialization(argc, argv, 1);
+
   const int dim = 2;
 
   Step101::WaveSolver<dim> wave_solver;
