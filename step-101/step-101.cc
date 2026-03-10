@@ -45,6 +45,7 @@
 #include <deal.II/lac/affine_constraints.h>
 #include <deal.II/lac/dynamic_sparsity_pattern.h>
 #include <deal.II/lac/full_matrix.h>
+#include <deal.II/lac/la_parallel_vector.h>
 #include <deal.II/lac/precondition.h>
 #include <deal.II/lac/solver_cg.h>
 #include <deal.II/lac/solver_control.h>
@@ -215,7 +216,7 @@ namespace Step101
 
     void assemble_system();
 
-    void solve(const double evaluating_time, const Vector<double> previous_solution, Vector<double> &solution_out);
+    void solve(const double evaluating_time, const LinearAlgebra::distributed::Vector<double> previous_solution, LinearAlgebra::distributed::Vector<double> &solution_out);
 
     void output_results() const;
 
@@ -239,16 +240,16 @@ namespace Step101
     // discrete level set function that describes the geometry of the domain.
     const FE_Q<dim> fe_level_set;
     DoFHandler<dim> level_set_dof_handler;
-    Vector<double>  level_set;
+    LinearAlgebra::distributed::Vector<double>  level_set;
 
     // The second DoFHandler manages the DoFs for the solution of the Poisson
     // equation.
     hp::FECollection<dim> fe_collection;
     DoFHandler<dim>       dof_handler;
-    Vector<double> solution;          // u^n
-    Vector<double> old_solution;      // u^{n-1}
-    Vector<double> derivative_solution;          // u^n
-    Vector<double> old_derivative_solution;      // u^{n-1}
+    LinearAlgebra::distributed::Vector<double> solution;          // u^n
+    LinearAlgebra::distributed::Vector<double> old_solution;      // u^{n-1}
+    LinearAlgebra::distributed::Vector<double> derivative_solution;          // u^n
+    LinearAlgebra::distributed::Vector<double> old_derivative_solution;      // u^{n-1}
 
     NonMatching::MeshClassifier<dim> mesh_classifier;
 
@@ -256,7 +257,7 @@ namespace Step101
     SparseMatrix<double> mass_matrix;
     SparseMatrix<double> stiffness_matrix;
     SparseMatrix<double> system_matrix;
-    Vector<double>       rhs;
+    LinearAlgebra::distributed::Vector<double>       rhs;
 
     double       time;
     double       time_step;
@@ -664,14 +665,14 @@ namespace Step101
 
   // @sect3{Solving the System}
   template <int dim>
-  void WaveSolver<dim>::solve(const double evaluating_time, const Vector<double> previous_solution, Vector<double> &solution_out)
+  void WaveSolver<dim>::solve(const double evaluating_time, const LinearAlgebra::distributed::Vector<double> previous_solution, LinearAlgebra::distributed::Vector<double> &solution_out)
   {
 
     rhs = 0;
 
     if (theta < 1.0)
       {
-        Vector<double> tmp(solution.size());
+        LinearAlgebra::distributed::Vector<double> tmp(solution.size());
         stiffness_matrix.vmult(tmp, previous_solution);
         rhs.add(-1.0, tmp);
       }
@@ -773,7 +774,7 @@ namespace Step101
 
     const unsigned int max_iterations = 100 * solution.size();
     ReductionControl      solver_control(max_iterations,1e-20,1e-10);
-    SolverCG<>         solver(solver_control);
+    SolverCG<LinearAlgebra::distributed::Vector<double>>         solver(solver_control);
     solver.solve(system_matrix, solution_out, rhs, PreconditionIdentity());
     // PreconditionSSOR<SparseMatrix<double>> preconditioner;
     // // preconditioner.initialize(system_matrix, 1.2);
@@ -798,7 +799,7 @@ namespace Step101
     data_out.add_data_vector(dof_handler, solution, "solution");
     data_out.add_data_vector(level_set_dof_handler, level_set, "level_set");
 
-    Vector<double> analytical_solution;
+    LinearAlgebra::distributed::Vector<double> analytical_solution;
     analytical_solution.reinit(solution);
 
     AnalyticalSolution<dim> analytical_solution_fu;
@@ -923,17 +924,17 @@ namespace Step101
         
         while(time<final_time-1e-6)
         {
-          Vector<double> sol_k1(dof_handler.n_dofs());
-          Vector<double> sol_k2(dof_handler.n_dofs());
-          Vector<double> sol_k3(dof_handler.n_dofs());
-          Vector<double> sol_k4(dof_handler.n_dofs());
-          Vector<double> tmp(dof_handler.n_dofs());
+          LinearAlgebra::distributed::Vector<double> sol_k1(dof_handler.n_dofs());
+          LinearAlgebra::distributed::Vector<double> sol_k2(dof_handler.n_dofs());
+          LinearAlgebra::distributed::Vector<double> sol_k3(dof_handler.n_dofs());
+          LinearAlgebra::distributed::Vector<double> sol_k4(dof_handler.n_dofs());
+          LinearAlgebra::distributed::Vector<double> tmp(dof_handler.n_dofs());
 
-          Vector<double> der_sol_k1(dof_handler.n_dofs());
-          Vector<double> der_sol_k2(dof_handler.n_dofs());
-          Vector<double> der_sol_k3(dof_handler.n_dofs());
-          Vector<double> der_sol_k4(dof_handler.n_dofs());
-          Vector<double> der_tmp(dof_handler.n_dofs());
+          LinearAlgebra::distributed::Vector<double> der_sol_k1(dof_handler.n_dofs());
+          LinearAlgebra::distributed::Vector<double> der_sol_k2(dof_handler.n_dofs());
+          LinearAlgebra::distributed::Vector<double> der_sol_k3(dof_handler.n_dofs());
+          LinearAlgebra::distributed::Vector<double> der_sol_k4(dof_handler.n_dofs());
+          LinearAlgebra::distributed::Vector<double> der_tmp(dof_handler.n_dofs());
 
           // k1
           solve(time, old_solution, der_sol_k1);
