@@ -27,6 +27,7 @@
 #include <deal.II/base/quadrature_lib.h>
 #include <deal.II/base/tensor.h>
 
+#include <deal.II/distributed/tria.h>
 #include <deal.II/dofs/dof_tools.h>
 
 #include <deal.II/fe/fe_interface_values.h>
@@ -238,7 +239,7 @@ namespace Step101
     InitialCondition<dim> initial_condition;
     DerivativeInitialCondition<dim> derivative_initial_condition;
 
-    Triangulation<dim> triangulation;
+    parallel::distributed::Triangulation<dim> triangulation;
 
     // We need two separate DoFHandlers. The first manages the DoFs for the
     // discrete level set function that describes the geometry of the domain.
@@ -288,6 +289,7 @@ namespace Step101
   WaveSolver<dim>::WaveSolver()
     : fe_degree(2)
     , fe_level_set(fe_degree)
+    , triangulation(MPI_COMM_WORLD)
     , level_set_dof_handler(triangulation)
     , dof_handler(triangulation)
     , mesh_classifier(level_set_dof_handler, level_set)
@@ -330,7 +332,12 @@ namespace Step101
     //std::cout << "Setting up discrete level set function" << std::endl;
 
     level_set_dof_handler.distribute_dofs(fe_level_set);
-    level_set.reinit(level_set_dof_handler.n_dofs());
+
+    const auto partitioner = std::make_shared<const Utilities::MPI::Partitioner>(
+      level_set_dof_handler.locally_owned_dofs(),
+      DoFTools::extract_locally_active_dofs(level_set_dof_handler),
+      level_set_dof_handler.get_mpi_communicator());
+    level_set.reinit(partitioner);
 
     const Functions::SignedDistance::Sphere<dim> signed_distance_sphere;
     VectorTools::interpolate(level_set_dof_handler,
@@ -410,12 +417,18 @@ namespace Step101
 
     mass_matrix.reinit(sparsity_pattern);
     stiffness_matrix.reinit(sparsity_pattern);
-    system_matrix.reinit(sparsity_pattern);    
-    solution.reinit(dof_handler.n_dofs());
-    old_solution.reinit(dof_handler.n_dofs());
-    derivative_solution.reinit(dof_handler.n_dofs());
-    old_derivative_solution.reinit(dof_handler.n_dofs());
-    rhs.reinit(dof_handler.n_dofs());
+    system_matrix.reinit(sparsity_pattern); 
+
+    const auto partitioner = std::make_shared<const Utilities::MPI::Partitioner>(
+      dof_handler.locally_owned_dofs(),
+      DoFTools::extract_locally_active_dofs(dof_handler),
+      dof_handler.get_mpi_communicator());
+    solution.reinit(partitioner);
+
+    old_solution.reinit(solution);
+    derivative_solution.reinit(solution);
+    old_derivative_solution.reinit(solution);
+    rhs.reinit(solution);
   }
 
 
@@ -696,7 +709,8 @@ namespace Step101
 
     if (theta < 1.0)
       {
-        LinearAlgebra::distributed::Vector<double> tmp(solution.size());
+        LinearAlgebra::distributed::Vector<double> tmp;
+        tmp.reinit(solution.size());
         stiffness_matrix.vmult(tmp, previous_solution);
         rhs.add(-1.0, tmp);
       }
@@ -957,17 +971,28 @@ namespace Step101
         
         while(time<final_time-1e-6)
         {
-          LinearAlgebra::distributed::Vector<double> sol_k1(dof_handler.n_dofs());
-          LinearAlgebra::distributed::Vector<double> sol_k2(dof_handler.n_dofs());
-          LinearAlgebra::distributed::Vector<double> sol_k3(dof_handler.n_dofs());
-          LinearAlgebra::distributed::Vector<double> sol_k4(dof_handler.n_dofs());
-          LinearAlgebra::distributed::Vector<double> tmp(dof_handler.n_dofs());
+          LinearAlgebra::distributed::Vector<double> sol_k1;
+          LinearAlgebra::distributed::Vector<double> sol_k2;
+          LinearAlgebra::distributed::Vector<double> sol_k3;
+          LinearAlgebra::distributed::Vector<double> sol_k4;
+          LinearAlgebra::distributed::Vector<double> tmp;
 
-          LinearAlgebra::distributed::Vector<double> der_sol_k1(dof_handler.n_dofs());
-          LinearAlgebra::distributed::Vector<double> der_sol_k2(dof_handler.n_dofs());
-          LinearAlgebra::distributed::Vector<double> der_sol_k3(dof_handler.n_dofs());
-          LinearAlgebra::distributed::Vector<double> der_sol_k4(dof_handler.n_dofs());
-          LinearAlgebra::distributed::Vector<double> der_tmp(dof_handler.n_dofs());
+          LinearAlgebra::distributed::Vector<double> der_sol_k1;
+          LinearAlgebra::distributed::Vector<double> der_sol_k2;
+          LinearAlgebra::distributed::Vector<double> der_sol_k3;
+          LinearAlgebra::distributed::Vector<double> der_sol_k4;
+          LinearAlgebra::distributed::Vector<double> der_tmp;
+
+          sol_k1.reinit(old_solution);
+          sol_k2.reinit(old_solution);
+          sol_k3.reinit(old_solution);
+          sol_k4.reinit(old_solution);
+          tmp.reinit(old_solution);
+          der_sol_k1.reinit(old_solution);
+          der_sol_k2.reinit(old_solution);
+          der_sol_k3.reinit(old_solution);
+          der_sol_k4.reinit(old_solution);
+          der_tmp.reinit(old_solution);
 
           // k1
           solve(time, old_solution, der_sol_k1);
