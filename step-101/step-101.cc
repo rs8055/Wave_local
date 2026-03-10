@@ -27,6 +27,7 @@
 #include <deal.II/base/quadrature_lib.h>
 #include <deal.II/base/tensor.h>
 
+#include <deal.II/distributed/tria.h>
 #include <deal.II/dofs/dof_tools.h>
 
 #include <deal.II/fe/fe_interface_values.h>
@@ -45,11 +46,16 @@
 #include <deal.II/lac/affine_constraints.h>
 #include <deal.II/lac/dynamic_sparsity_pattern.h>
 #include <deal.II/lac/full_matrix.h>
+#include <deal.II/lac/la_parallel_vector.h>
 #include <deal.II/lac/precondition.h>
 #include <deal.II/lac/solver_cg.h>
 #include <deal.II/lac/solver_control.h>
 #include <deal.II/lac/sparse_matrix.h>
 #include <deal.II/lac/sparsity_pattern.h>
+#include <deal.II/lac/trilinos_precondition.h>
+#include <deal.II/lac/trilinos_solver.h>
+#include <deal.II/lac/trilinos_sparse_matrix.h>
+#include <deal.II/lac/trilinos_sparsity_pattern.h>
 #include <deal.II/lac/vector.h>
 
 #include <deal.II/numerics/data_out.h>
@@ -215,7 +221,7 @@ namespace Step101
 
     void assemble_system();
 
-    void solve(const double evaluating_time, const Vector<double> previous_solution, Vector<double> &solution_out);
+    void solve(const double evaluating_time, const LinearAlgebra::distributed::Vector<double> previous_solution, LinearAlgebra::distributed::Vector<double> &solution_out);
 
     void output_results() const;
 
@@ -233,30 +239,35 @@ namespace Step101
     InitialCondition<dim> initial_condition;
     DerivativeInitialCondition<dim> derivative_initial_condition;
 
-    Triangulation<dim> triangulation;
+    parallel::distributed::Triangulation<dim> triangulation;
 
     // We need two separate DoFHandlers. The first manages the DoFs for the
     // discrete level set function that describes the geometry of the domain.
     const FE_Q<dim> fe_level_set;
     DoFHandler<dim> level_set_dof_handler;
-    Vector<double>  level_set;
+    LinearAlgebra::distributed::Vector<double>  level_set;
 
     // The second DoFHandler manages the DoFs for the solution of the Poisson
     // equation.
     hp::FECollection<dim> fe_collection;
     DoFHandler<dim>       dof_handler;
-    Vector<double> solution;          // u^n
-    Vector<double> old_solution;      // u^{n-1}
-    Vector<double> derivative_solution;          // u^n
-    Vector<double> old_derivative_solution;      // u^{n-1}
+    LinearAlgebra::distributed::Vector<double> solution;          // u^n
+    LinearAlgebra::distributed::Vector<double> old_solution;      // u^{n-1}
+    LinearAlgebra::distributed::Vector<double> derivative_solution;          // u^n
+    LinearAlgebra::distributed::Vector<double> old_derivative_solution;      // u^{n-1}
 
     NonMatching::MeshClassifier<dim> mesh_classifier;
 
-    SparsityPattern      sparsity_pattern;
-    SparseMatrix<double> mass_matrix;
-    SparseMatrix<double> stiffness_matrix;
-    SparseMatrix<double> system_matrix;
-    Vector<double>       rhs;
+    TrilinosWrappers::SparseMatrix mass_matrix;
+    TrilinosWrappers::SparseMatrix stiffness_matrix;
+    TrilinosWrappers::SparseMatrix system_matrix;
+
+    TrilinosWrappers::PreconditionILU precondition_ilu;
+    TrilinosWrappers::PreconditionAMG precondition_amg;
+
+    TrilinosWrappers::SolverDirect solver_direct;
+
+    LinearAlgebra::distributed::Vector<double>       rhs;
 
     double       time;
     double       time_step;
@@ -268,6 +279,8 @@ namespace Step101
     // theta = 0.5: Crank-Nicolson
     // theta = 1: Backward Euler (implicit, most stable)
     const double theta;
+
+    const std::string lin_solver_type;
   };
 
 
@@ -276,6 +289,7 @@ namespace Step101
   WaveSolver<dim>::WaveSolver()
     : fe_degree(2)
     , fe_level_set(fe_degree)
+    , triangulation(MPI_COMM_WORLD)
     , level_set_dof_handler(triangulation)
     , dof_handler(triangulation)
     , mesh_classifier(level_set_dof_handler, level_set)
@@ -284,6 +298,7 @@ namespace Step101
     , final_time(1.0)     
     , timestep_number(0)
     , theta(0.0)
+    , lin_solver_type("direct")
   {}
 
 
@@ -295,7 +310,7 @@ namespace Step101
   template <int dim>
   void WaveSolver<dim>::make_grid()
   {
-    std::cout << "Creating background mesh" << std::endl;
+    //std::cout << "Creating background mesh" << std::endl;
     // Triangulation<dim> triangulation_quad;
     // GridGenerator::hyper_cube(triangulation_quad, -2, 2);  
     GridGenerator::hyper_cube(triangulation, -2 , 2);
@@ -314,15 +329,21 @@ namespace Step101
   template <int dim>
   void WaveSolver<dim>::setup_discrete_level_set()
   {
-    std::cout << "Setting up discrete level set function" << std::endl;
+    //std::cout << "Setting up discrete level set function" << std::endl;
 
     level_set_dof_handler.distribute_dofs(fe_level_set);
-    level_set.reinit(level_set_dof_handler.n_dofs());
+
+    const auto partitioner = std::make_shared<const Utilities::MPI::Partitioner>(
+      level_set_dof_handler.locally_owned_dofs(),
+      DoFTools::extract_locally_relevant_dofs(level_set_dof_handler),
+      level_set_dof_handler.get_mpi_communicator());
+    level_set.reinit(partitioner);
 
     const Functions::SignedDistance::Sphere<dim> signed_distance_sphere;
     VectorTools::interpolate(level_set_dof_handler,
                              signed_distance_sphere,
                              level_set);
+    level_set.update_ghost_values();
   }
 
 
@@ -343,12 +364,13 @@ namespace Step101
   template <int dim>
   void WaveSolver<dim>::distribute_dofs()
   {
-    std::cout << "Distributing degrees of freedom" << std::endl;
+    //std::cout << "Distributing degrees of freedom" << std::endl;
 
     fe_collection.push_back(FE_Q<dim>(fe_degree));
     fe_collection.push_back(FE_Nothing<dim>());
 
-    for (const auto &cell : dof_handler.active_cell_iterators())
+    for (const auto &cell : dof_handler.active_cell_iterators() |
+           IteratorFilters::LocallyOwnedCell())
       {
         const NonMatching::LocationToLevelSet cell_location =
           mesh_classifier.location_to_level_set(cell);
@@ -365,14 +387,16 @@ namespace Step101
   template <int dim>
   void WaveSolver<dim>::initialize_matrices()
   {
-    std::cout << "Initializing matrices" << std::endl;
+    //std::cout << "Initializing matrices" << std::endl;
 
     const auto face_has_flux_coupling = [&](const auto        &cell,
                                             const unsigned int face_index) {
       return this->face_has_ghost_penalty(cell, face_index);
     };
 
-    DynamicSparsityPattern dsp(dof_handler.n_dofs(), dof_handler.n_dofs());
+    TrilinosWrappers::SparsityPattern sparsity_pattern;
+    sparsity_pattern.reinit(dof_handler.locally_owned_dofs(),
+                            dof_handler.get_communicator());
 
     const unsigned int           n_components = fe_collection.n_components();
     Table<2, DoFTools::Coupling> cell_coupling(n_components, n_components);
@@ -384,23 +408,29 @@ namespace Step101
     const bool                      keep_constrained_dofs = true;
 
     DoFTools::make_flux_sparsity_pattern(dof_handler,
-                                         dsp,
+                                         sparsity_pattern,
                                          constraints,
                                          keep_constrained_dofs,
                                          cell_coupling,
                                          face_coupling,
                                          numbers::invalid_subdomain_id,
                                          face_has_flux_coupling);
-    sparsity_pattern.copy_from(dsp);
+    sparsity_pattern.compress();
 
     mass_matrix.reinit(sparsity_pattern);
     stiffness_matrix.reinit(sparsity_pattern);
-    system_matrix.reinit(sparsity_pattern);    
-    solution.reinit(dof_handler.n_dofs());
-    old_solution.reinit(dof_handler.n_dofs());
-    derivative_solution.reinit(dof_handler.n_dofs());
-    old_derivative_solution.reinit(dof_handler.n_dofs());
-    rhs.reinit(dof_handler.n_dofs());
+    system_matrix.reinit(sparsity_pattern); 
+
+    const auto partitioner = std::make_shared<const Utilities::MPI::Partitioner>(
+      dof_handler.locally_owned_dofs(),
+      DoFTools::extract_locally_active_dofs(dof_handler),
+      dof_handler.get_mpi_communicator());
+    solution.reinit(partitioner);
+
+    old_solution.reinit(solution);
+    derivative_solution.reinit(solution);
+    old_derivative_solution.reinit(solution);
+    rhs.reinit(solution);
   }
 
 
@@ -439,7 +469,7 @@ namespace Step101
   template <int dim>
   void WaveSolver<dim>::assemble_system()
   {
-    std::cout << "Assembling" << std::endl;
+    //std::cout << "Assembling" << std::endl;
 
     const unsigned int n_dofs_per_cell = fe_collection[0].dofs_per_cell;
     FullMatrix<double> local_mass(n_dofs_per_cell, n_dofs_per_cell);
@@ -485,6 +515,7 @@ namespace Step101
     // filter.
     for (const auto &cell :
          dof_handler.active_cell_iterators() |
+           IteratorFilters::LocallyOwnedCell() |
            IteratorFilters::ActiveFEIndexEqualTo(ActiveFEIndex::lagrange))
       {
         local_mass = 0;
@@ -657,21 +688,32 @@ namespace Step101
             }
       }
 
+    mass_matrix.compress(VectorOperation::add);
+    stiffness_matrix.compress(VectorOperation::add);
+
     system_matrix.copy_from(mass_matrix);
+
+    if(lin_solver_type == "direct")
+      solver_direct.initialize(system_matrix);
+    else if(lin_solver_type == "ilu")
+      precondition_ilu.initialize(system_matrix);
+    else if(lin_solver_type == "amg")
+      precondition_amg.initialize(system_matrix);
     // system_matrix.add(theta * time_step, stiffness_matrix);
   }
 
 
   // @sect3{Solving the System}
   template <int dim>
-  void WaveSolver<dim>::solve(const double evaluating_time, const Vector<double> previous_solution, Vector<double> &solution_out)
+  void WaveSolver<dim>::solve(const double evaluating_time, const LinearAlgebra::distributed::Vector<double> previous_solution, LinearAlgebra::distributed::Vector<double> &solution_out)
   {
 
     rhs = 0;
 
     if (theta < 1.0)
       {
-        Vector<double> tmp(solution.size());
+        LinearAlgebra::distributed::Vector<double> tmp;
+        tmp.reinit(solution);
         stiffness_matrix.vmult(tmp, previous_solution);
         rhs.add(-1.0, tmp);
       }
@@ -700,7 +742,9 @@ namespace Step101
 
     for (const auto &cell :
          dof_handler.active_cell_iterators() |
+           IteratorFilters::LocallyOwnedCell() |
            IteratorFilters::ActiveFEIndexEqualTo(ActiveFEIndex::lagrange))
+      if(cell->is_locally_owned())
       {
         local_rhs = 0;
         const double cell_side_length = cell->minimum_vertex_distance();
@@ -769,16 +813,27 @@ namespace Step101
         rhs.add(local_dof_indices, local_rhs);
       }
 
-    std::cout << "Solving system" << std::endl;
+    rhs.compress(VectorOperation::add);
 
-    const unsigned int max_iterations = 100 * solution.size();
-    ReductionControl      solver_control(max_iterations,1e-20,1e-10);
-    SolverCG<>         solver(solver_control);
-    solver.solve(system_matrix, solution_out, rhs, PreconditionIdentity());
-    // PreconditionSSOR<SparseMatrix<double>> preconditioner;
-    // // preconditioner.initialize(system_matrix, 1.2);
-    // preconditioner.initialize(system_matrix, 1.0);
-    // solver.solve(system_matrix, solution_out, rhs, preconditioner); 
+    //std::cout << "Solving system" << std::endl;
+
+    if(lin_solver_type == "direct")
+      {
+        solver_direct.solve(solution_out, rhs);
+      }
+    else
+      {
+        const unsigned int max_iterations = 100 * solution.size();
+        ReductionControl      solver_control(max_iterations,1e-20,1e-10);
+        SolverCG<LinearAlgebra::distributed::Vector<double>>         solver(solver_control);
+
+        if(lin_solver_type == "identity")
+          solver.solve(system_matrix, solution_out, rhs, PreconditionIdentity());
+        else if(lin_solver_type == "ilu")
+          solver.solve(system_matrix, solution_out, rhs, precondition_ilu);
+        else if(lin_solver_type == "amg")
+          solver.solve(system_matrix, solution_out, rhs, precondition_amg);
+      }
   }
 
 
@@ -792,13 +847,13 @@ namespace Step101
   template <int dim>
   void WaveSolver<dim>::output_results() const
   {
-    std::cout << "Writing vtu file" << std::endl;
+    //std::cout << "Writing vtu file" << std::endl;
 
     DataOut<dim> data_out;
     data_out.add_data_vector(dof_handler, solution, "solution");
     data_out.add_data_vector(level_set_dof_handler, level_set, "level_set");
 
-    Vector<double> analytical_solution;
+    LinearAlgebra::distributed::Vector<double> analytical_solution;
     analytical_solution.reinit(solution);
 
     AnalyticalSolution<dim> analytical_solution_fu;
@@ -812,7 +867,7 @@ namespace Step101
 
     data_out.set_cell_selection(
       [this](const typename Triangulation<dim>::cell_iterator &cell) {
-        return cell->is_active() &&
+        return cell->is_active() && cell->is_locally_owned() &&
                mesh_classifier.location_to_level_set(cell) !=
                  NonMatching::LocationToLevelSet::outside;
       });
@@ -825,7 +880,9 @@ namespace Step101
   template <int dim>
   double WaveSolver<dim>::compute_L2_error() const
   {
-    std::cout << "Computing L2 error" << std::endl;
+    //std::cout << "Computing L2 error" << std::endl;
+
+    solution.update_ghost_values();
 
     const QGauss<1> quadrature_1D(fe_degree + 1);
 
@@ -849,6 +906,7 @@ namespace Step101
 
     for (const auto &cell :
          dof_handler.active_cell_iterators() |
+           IteratorFilters::LocallyOwnedCell() |
            IteratorFilters::ActiveFEIndexEqualTo(ActiveFEIndex::lagrange))
       {
         non_matching_fe_values.reinit(cell);
@@ -872,6 +930,11 @@ namespace Step101
           }
       }
 
+
+    solution.zero_out_ghost_values();
+
+    error_L2_squared = Utilities::MPI::sum(error_L2_squared, dof_handler.get_mpi_communicator());
+
     return std::sqrt(error_L2_squared);
   }
 
@@ -894,15 +957,14 @@ namespace Step101
     double prev_h = 0.0;
     for (unsigned int cycle = 0; cycle <= n_refinements; cycle++)
       {
-        std::cout << "Refinement cycle " << cycle << std::endl;
+        //std::cout << "Refinement cycle " << cycle << std::endl;
         triangulation.refine_global(1);
         time = 0.0;
         timestep_number = 0;
-        const double cell_side_length =
-          triangulation.begin_active()->minimum_vertex_distance();
+        const double cell_side_length = 4.0 / std::pow(2.0, 2 + 1 + cycle); // TODO
         time_step = (0.1)*std::pow(cell_side_length,1);
         setup_discrete_level_set();
-        std::cout << "Classifying cells" << std::endl;
+        //std::cout << "Classifying cells" << std::endl;
         mesh_classifier.reclassify();
         distribute_dofs();
         initialize_matrices();
@@ -923,17 +985,28 @@ namespace Step101
         
         while(time<final_time-1e-6)
         {
-          Vector<double> sol_k1(dof_handler.n_dofs());
-          Vector<double> sol_k2(dof_handler.n_dofs());
-          Vector<double> sol_k3(dof_handler.n_dofs());
-          Vector<double> sol_k4(dof_handler.n_dofs());
-          Vector<double> tmp(dof_handler.n_dofs());
+          LinearAlgebra::distributed::Vector<double> sol_k1;
+          LinearAlgebra::distributed::Vector<double> sol_k2;
+          LinearAlgebra::distributed::Vector<double> sol_k3;
+          LinearAlgebra::distributed::Vector<double> sol_k4;
+          LinearAlgebra::distributed::Vector<double> tmp;
 
-          Vector<double> der_sol_k1(dof_handler.n_dofs());
-          Vector<double> der_sol_k2(dof_handler.n_dofs());
-          Vector<double> der_sol_k3(dof_handler.n_dofs());
-          Vector<double> der_sol_k4(dof_handler.n_dofs());
-          Vector<double> der_tmp(dof_handler.n_dofs());
+          LinearAlgebra::distributed::Vector<double> der_sol_k1;
+          LinearAlgebra::distributed::Vector<double> der_sol_k2;
+          LinearAlgebra::distributed::Vector<double> der_sol_k3;
+          LinearAlgebra::distributed::Vector<double> der_sol_k4;
+          LinearAlgebra::distributed::Vector<double> der_tmp;
+
+          sol_k1.reinit(old_solution);
+          sol_k2.reinit(old_solution);
+          sol_k3.reinit(old_solution);
+          sol_k4.reinit(old_solution);
+          tmp.reinit(old_solution);
+          der_sol_k1.reinit(old_solution);
+          der_sol_k2.reinit(old_solution);
+          der_sol_k3.reinit(old_solution);
+          der_sol_k4.reinit(old_solution);
+          der_tmp.reinit(old_solution);
 
           // k1
           solve(time, old_solution, der_sol_k1);
@@ -976,7 +1049,7 @@ namespace Step101
           error_L2 = compute_L2_error();
           time += time_step;
           timestep_number += 1;
-          std::cout<<time<<"    "<<timestep_number<<std::endl;
+          //std::cout<<time<<"    "<<timestep_number<<std::endl;
           old_solution = solution;
           old_derivative_solution = derivative_solution;
         }
@@ -1005,12 +1078,15 @@ namespace Step101
         prev_error = error_L2;
         prev_h = cell_side_length;
 
-        std::cout << std::endl;
+        //std::cout << std::endl;
         // std::cout << std::setprecision(6) << std::scientific;
         for (const std::string &col : {"Mesh size", "Time Step", "L2-Error", "Rate"})
           convergence_table.set_precision(col, 8);
+        if(Utilities::MPI::this_mpi_process(dof_handler.get_communicator())== 0)
+        {
         convergence_table.write_text(std::cout);
         std::cout << std::endl;
+        }
 
         
 
@@ -1022,8 +1098,10 @@ namespace Step101
 
 
 // @sect3{The main() function}
-int main()
+int main(int argc, char *argv[])
 {
+  dealii::Utilities::MPI::MPI_InitFinalize mpi_initialization(argc, argv, 1);
+
   const int dim = 2;
 
   Step101::WaveSolver<dim> wave_solver;
