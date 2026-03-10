@@ -296,7 +296,7 @@ namespace Step101
   template <int dim>
   void WaveSolver<dim>::make_grid()
   {
-    std::cout << "Creating background mesh" << std::endl;
+    //std::cout << "Creating background mesh" << std::endl;
     // Triangulation<dim> triangulation_quad;
     // GridGenerator::hyper_cube(triangulation_quad, -2, 2);  
     GridGenerator::hyper_cube(triangulation, -2 , 2);
@@ -315,7 +315,7 @@ namespace Step101
   template <int dim>
   void WaveSolver<dim>::setup_discrete_level_set()
   {
-    std::cout << "Setting up discrete level set function" << std::endl;
+    //std::cout << "Setting up discrete level set function" << std::endl;
 
     level_set_dof_handler.distribute_dofs(fe_level_set);
     level_set.reinit(level_set_dof_handler.n_dofs());
@@ -344,7 +344,7 @@ namespace Step101
   template <int dim>
   void WaveSolver<dim>::distribute_dofs()
   {
-    std::cout << "Distributing degrees of freedom" << std::endl;
+    //std::cout << "Distributing degrees of freedom" << std::endl;
 
     fe_collection.push_back(FE_Q<dim>(fe_degree));
     fe_collection.push_back(FE_Nothing<dim>());
@@ -366,7 +366,7 @@ namespace Step101
   template <int dim>
   void WaveSolver<dim>::initialize_matrices()
   {
-    std::cout << "Initializing matrices" << std::endl;
+    //std::cout << "Initializing matrices" << std::endl;
 
     const auto face_has_flux_coupling = [&](const auto        &cell,
                                             const unsigned int face_index) {
@@ -440,7 +440,7 @@ namespace Step101
   template <int dim>
   void WaveSolver<dim>::assemble_system()
   {
-    std::cout << "Assembling" << std::endl;
+    //std::cout << "Assembling" << std::endl;
 
     const unsigned int n_dofs_per_cell = fe_collection[0].dofs_per_cell;
     FullMatrix<double> local_mass(n_dofs_per_cell, n_dofs_per_cell);
@@ -770,7 +770,7 @@ namespace Step101
         rhs.add(local_dof_indices, local_rhs);
       }
 
-    std::cout << "Solving system" << std::endl;
+    //std::cout << "Solving system" << std::endl;
 
     const unsigned int max_iterations = 100 * solution.size();
     ReductionControl      solver_control(max_iterations,1e-20,1e-10);
@@ -793,7 +793,7 @@ namespace Step101
   template <int dim>
   void WaveSolver<dim>::output_results() const
   {
-    std::cout << "Writing vtu file" << std::endl;
+    //std::cout << "Writing vtu file" << std::endl;
 
     DataOut<dim> data_out;
     data_out.add_data_vector(dof_handler, solution, "solution");
@@ -826,7 +826,7 @@ namespace Step101
   template <int dim>
   double WaveSolver<dim>::compute_L2_error() const
   {
-    std::cout << "Computing L2 error" << std::endl;
+    //std::cout << "Computing L2 error" << std::endl;
 
     const QGauss<1> quadrature_1D(fe_degree + 1);
 
@@ -895,7 +895,7 @@ namespace Step101
     double prev_h = 0.0;
     for (unsigned int cycle = 0; cycle <= n_refinements; cycle++)
       {
-        std::cout << "Refinement cycle " << cycle << std::endl;
+        //std::cout << "Refinement cycle " << cycle << std::endl;
         triangulation.refine_global(1);
         time = 0.0;
         timestep_number = 0;
@@ -903,7 +903,7 @@ namespace Step101
           triangulation.begin_active()->minimum_vertex_distance();
         time_step = (0.1)*std::pow(cell_side_length,1);
         setup_discrete_level_set();
-        std::cout << "Classifying cells" << std::endl;
+        //std::cout << "Classifying cells" << std::endl;
         mesh_classifier.reclassify();
         distribute_dofs();
         initialize_matrices();
@@ -977,7 +977,7 @@ namespace Step101
           error_L2 = compute_L2_error();
           time += time_step;
           timestep_number += 1;
-          std::cout<<time<<"    "<<timestep_number<<std::endl;
+          //std::cout<<time<<"    "<<timestep_number<<std::endl;
           old_solution = solution;
           old_derivative_solution = derivative_solution;
         }
