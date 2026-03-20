@@ -23,9 +23,8 @@ set(TARGET_SRC
 
 cmake_minimum_required(VERSION 3.13.4)
 
-find_package(deal.II 9.7.0
+find_package(deal.II 9.7.1
   HINTS ${deal.II_DIR} ${DEAL_II_DIR} $ENV{DEAL_II_DIR}
-        /home/ritesh/Downloads/dealii_local
 )
 if(NOT ${deal.II_FOUND})
   message(FATAL_ERROR "\n"

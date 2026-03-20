@@ -64,6 +64,7 @@
 #include <fstream>
 #include <vector>
 #include <iomanip>
+#include <cmath>
 
 // The first new header contains some common level set functions.
 // For example, the spherical geometry that we use here.
@@ -80,6 +81,32 @@
 namespace Step101
 {
   using namespace dealii;
+  template <int dim>
+  class WaveSpeed : public Function<dim>
+  {
+  public:
+    double value(const Point<dim>  &point,
+                 const unsigned int component = 0) const override;
+  };
+
+  template <int dim>
+  double WaveSpeed<dim>::value(const Point<dim>  &point,
+                                        const unsigned int component) const
+  {
+    AssertIndexRange(component, this->n_components);
+    (void)component;
+    // const double t = this->get_time();
+    // return (1. - 2. / dim * (point.norm_square() - 1.))* std::exp(-t);
+
+    return 2.0;
+    // return point[0]*point[1];
+
+    // const double alpha_0 = 2.4048255577; // first zero of J0
+    // return std::cyl_bessel_j(0, alpha_0 * point.norm()) * std::cos(alpha_0 * t);
+
+  }
+
+
   // ==================================================================
   // Analytic Solution
   // ==================================================================
@@ -100,7 +127,7 @@ namespace Step101
     const double t = this->get_time();
     // return (1. - 2. / dim * (point.norm_square() - 1.))* std::exp(-t);
 
-    return std::sin(point[0]) * std::sin(point[1]) * std::cos(std::sqrt(2.0) * t);
+    return std::sin(point[0]) * std::sin(point[1]) * std::cos((2.0) * t);
 
     // const double alpha_0 = 2.4048255577; // first zero of J0
     // return std::cyl_bessel_j(0, alpha_0 * point.norm()) * std::cos(alpha_0 * t);
@@ -127,6 +154,10 @@ namespace Step101
     const double t = this->get_time();
     // return (1. - 2. / dim * (p.norm_square() - 1.))* std::exp(-t) + 4* std::exp(-t);
     return 0.0;
+  //   return std::cos(2.0*t) * (
+  //   (-4.0 + 2.0*p[0]*p[1]) * std::sin(p[0]) * std::sin(p[1])
+  // - p[1] * std::cos(p[0]) * std::sin(p[1])
+  // - p[0] * std::sin(p[0]) * std::cos(p[1]));
   }
 
   // ==================================================================
@@ -149,7 +180,7 @@ namespace Step101
     const double t = this->get_time();
     // return (1. - 2. / dim * (point.norm_square() - 1.))* std::exp(-t);
 
-    return std::sin(point[0]) * std::sin(point[1]) * std::cos(std::sqrt(2.0) * t);
+    return std::sin(point[0]) * std::sin(point[1]) * std::cos((2.0) * t);
 
 
     // return 0.0;
@@ -238,6 +269,7 @@ namespace Step101
     BoundaryValues<dim>   boundary_condition;
     InitialCondition<dim> initial_condition;
     DerivativeInitialCondition<dim> derivative_initial_condition;
+    WaveSpeed<dim> wave_speed;
 
     parallel::distributed::Triangulation<dim> triangulation;
 
@@ -246,6 +278,7 @@ namespace Step101
     const FE_Q<dim> fe_level_set;
     DoFHandler<dim> level_set_dof_handler;
     LinearAlgebra::distributed::Vector<double>  level_set;
+    LinearAlgebra::distributed::Vector<double>  wave_speed_set;
 
     // The second DoFHandler manages the DoFs for the solution of the Poisson
     // equation.
@@ -336,7 +369,7 @@ namespace Step101
     const auto partitioner = std::make_shared<const Utilities::MPI::Partitioner>(
       level_set_dof_handler.locally_owned_dofs(),
       DoFTools::extract_locally_relevant_dofs(level_set_dof_handler),
-      level_set_dof_handler.get_mpi_communicator());
+      level_set_dof_handler.get_communicator());
     level_set.reinit(partitioner);
 
     const Functions::SignedDistance::Sphere<dim> signed_distance_sphere;
@@ -424,13 +457,14 @@ namespace Step101
     const auto partitioner = std::make_shared<const Utilities::MPI::Partitioner>(
       dof_handler.locally_owned_dofs(),
       DoFTools::extract_locally_active_dofs(dof_handler),
-      dof_handler.get_mpi_communicator());
+      dof_handler.get_communicator());
     solution.reinit(partitioner);
 
     old_solution.reinit(solution);
     derivative_solution.reinit(solution);
     old_derivative_solution.reinit(solution);
     rhs.reinit(solution);
+    wave_speed_set.reinit(solution);
   }
 
 
@@ -474,6 +508,11 @@ namespace Step101
     const unsigned int n_dofs_per_cell = fe_collection[0].dofs_per_cell;
     FullMatrix<double> local_mass(n_dofs_per_cell, n_dofs_per_cell);
     FullMatrix<double> local_stiffness(n_dofs_per_cell, n_dofs_per_cell);
+
+    VectorTools::interpolate(dof_handler,
+                             wave_speed,
+                             wave_speed_set);
+    wave_speed_set.update_ghost_values();
 
     // The below local_rhs will be assembled later on because now it will depend upon time value too while the LHS system matrix is independent of time. Consequently
     // all the rhs assembly is deleted
@@ -529,6 +568,9 @@ namespace Step101
           non_matching_fe_values.get_inside_fe_values();
 
         if (inside_fe_values)
+        {
+          std::vector<double> c_values(inside_fe_values->n_quadrature_points);
+          inside_fe_values->get_function_values(wave_speed_set, c_values);  
           for (const unsigned int q :
                inside_fe_values->quadrature_point_indices())
             {
@@ -537,14 +579,14 @@ namespace Step101
                 {
                   for (const unsigned int j : inside_fe_values->dof_indices())
                     {
+                      local_stiffness(i, j) +=
+                          c_values[q] *   
+                          inside_fe_values->shape_grad(i, q) *
+                          inside_fe_values->shape_grad(j, q) *
+                          inside_fe_values->JxW(q);
                       local_mass(i, j) +=
                         inside_fe_values->shape_value(i, q) *
                         inside_fe_values->shape_value(j, q) *
-                        inside_fe_values->JxW(q);
-
-                      local_stiffness(i, j) +=
-                        inside_fe_values->shape_grad(i, q) *
-                        inside_fe_values->shape_grad(j, q) *
                         inside_fe_values->JxW(q);
                     }
                   // local_rhs(i) += rhs_function.value(point) *
@@ -552,12 +594,15 @@ namespace Step101
                   //                   inside_fe_values->JxW(q);
                 }
             }
+          }
 
         const std::optional<NonMatching::FEImmersedSurfaceValues<dim>>
           &surface_fe_values = non_matching_fe_values.get_surface_fe_values();
 
         if (surface_fe_values)
           {
+            std::vector<double> c_surf(surface_fe_values->n_quadrature_points);
+            surface_fe_values->get_function_values(wave_speed_set, c_surf); 
             for (const unsigned int q :
                  surface_fe_values->quadrature_point_indices())
               {
@@ -567,25 +612,18 @@ namespace Step101
                   surface_fe_values->normal_vector(q);
                 for (const unsigned int i : surface_fe_values->dof_indices())
                   {
-                    for (const unsigned int j :
-                         surface_fe_values->dof_indices())
+                    for (const unsigned int j : surface_fe_values->dof_indices())
                       {
-                        local_stiffness(i, j) +=
-                          (-normal * surface_fe_values->shape_grad(i, q) *
-                             surface_fe_values->shape_value(j, q) +
-                           -normal * surface_fe_values->shape_grad(j, q) *
-                             surface_fe_values->shape_value(i, q) +
-                           nitsche_parameter / cell_side_length *
-                             surface_fe_values->shape_value(i, q) *
-                             surface_fe_values->shape_value(j, q)) *
-                          surface_fe_values->JxW(q);
+                          local_stiffness(i, j) +=
+                            (c_surf[q]*(-normal * surface_fe_values->shape_grad(i, q) *
+                              surface_fe_values->shape_value(j, q) +
+                            -normal * surface_fe_values->shape_grad(j, q) *
+                              surface_fe_values->shape_value(i, q) )+
+                            nitsche_parameter / cell_side_length *
+                              surface_fe_values->shape_value(i, q) *
+                              surface_fe_values->shape_value(j, q)) *
+                            surface_fe_values->JxW(q);
                       }
-                    // local_rhs(i) +=
-                    //   boundary_condition.value(point) *
-                    //   (nitsche_parameter / cell_side_length *
-                    //      surface_fe_values->shape_value(i, q) -
-                    //    normal * surface_fe_values->shape_grad(i, q)) *
-                    //   surface_fe_values->JxW(q);
                   }
               }
           }
@@ -619,7 +657,7 @@ namespace Step101
                    ++q)
                 {
                   const Tensor<1, dim> normal =
-                    fe_interface_values.normal_vector(q);
+                    fe_interface_values.normal(q);
                   for (unsigned int i = 0; i < n_interface_dofs; ++i)
                     for (unsigned int j = 0; j < n_interface_dofs; ++j)
                       {
@@ -785,6 +823,8 @@ namespace Step101
 
         if (surface_fe_values)
           {
+            std::vector<double> c_surf(surface_fe_values->n_quadrature_points);
+            surface_fe_values->get_function_values(wave_speed_set, c_surf);
             for (const unsigned int q :
                  surface_fe_values->quadrature_point_indices())
               {
@@ -803,7 +843,7 @@ namespace Step101
                       g_value *
                       (nitsche_parameter / cell_side_length *
                          surface_fe_values->shape_value(i, q) -
-                       normal * surface_fe_values->shape_grad(i, q)) *
+                       c_surf[q]*normal * surface_fe_values->shape_grad(i, q)) *
                       surface_fe_values->JxW(q);
                   }
               }
@@ -933,7 +973,7 @@ namespace Step101
 
     solution.zero_out_ghost_values();
 
-    error_L2_squared = Utilities::MPI::sum(error_L2_squared, dof_handler.get_mpi_communicator());
+    error_L2_squared = Utilities::MPI::sum(error_L2_squared, dof_handler.get_communicator());
 
     return std::sqrt(error_L2_squared);
   }
@@ -962,7 +1002,7 @@ namespace Step101
         time = 0.0;
         timestep_number = 0;
         const double cell_side_length = 4.0 / std::pow(2.0, 2 + 1 + cycle); // TODO
-        time_step = (0.1)*std::pow(cell_side_length,1);
+        time_step = (0.05)*std::pow(cell_side_length,1);
         setup_discrete_level_set();
         //std::cout << "Classifying cells" << std::endl;
         mesh_classifier.reclassify();
@@ -981,7 +1021,8 @@ namespace Step101
         const double alpha_0 = 2.4048255577; // first zero of J0
         const double pi = std::acos(-1.0);  
         // final_time = 2.0 * pi / alpha_0;
-        final_time = 2.0 * pi / std::sqrt(2.0);
+        // final_time = 2.0 * M_PI / std::sqrt(2.0);
+        final_time = M_PI;
         
         while(time<final_time-1e-6)
         {
