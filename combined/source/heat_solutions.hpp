@@ -31,7 +31,7 @@ struct SolutionSet
 
 
 // ═══════════════════════════════════════════════════════
-//  SOLUTION 1: sin(x)sin(y)exp(-2t)
+//  SOLUTION 0: sin(x)sin(y)exp(-2t)
 // ═══════════════════════════════════════════════════════
 
 template <int dim>
@@ -98,7 +98,7 @@ public:
 
 
 // ═══════════════════════════════════════════════════════
-//  SOLUTION 2: (1 - 2/dim*(|x|^2 - 1)) * exp(-t)
+//  SOLUTION 1: (1 - 2/dim*(|x|^2 - 1)) * exp(-t)
 // ═══════════════════════════════════════════════════════
 
 template <int dim>
@@ -166,7 +166,7 @@ public:
 
 
 // ═══════════════════════════════════════════════════════
-//  SOLUTION 3: Bessel function J0(alpha*r)exp(-2*t)
+//  SOLUTION 2: Bessel function J0(alpha*r)exp(-2*t)
 // ═══════════════════════════════════════════════════════
 
 template <int dim>
@@ -256,7 +256,6 @@ SolutionSet<dim> make_solution(const int choice)
             s.initial_time        = 0.0;
             s.final_time          = 1.0;
             s.speed               = std::make_unique<Speed0<dim>>();
-            // s.speed               = 1.0;
             break;
         case 1:
             s.analytical_solution = std::make_unique<AnalyticalSolution1<dim>>();
@@ -266,7 +265,6 @@ SolutionSet<dim> make_solution(const int choice)
             s.initial_time        = 0.0;
             s.final_time          = 1.0;
             s.speed               = std::make_unique<Speed1<dim>>();
-            // s.speed               = 1.0;
             break;
         case 2:
             s.analytical_solution = std::make_unique<AnalyticalSolution2<dim>>();
@@ -276,7 +274,6 @@ SolutionSet<dim> make_solution(const int choice)
             s.initial_time        = 0.0;
             s.final_time          = 1.0;
             s.speed               = std::make_unique<Speed2<dim>>();
-            // s.speed               = 1.0;
             break;
         default:
             AssertThrow(false, ExcMessage("Unknown solution choice: "

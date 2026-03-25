@@ -22,7 +22,7 @@ public:
     , dof_handler(discretization.get_dof_handler())    
   {}
 
-  const double get_l2_error(const double final_time) const {
+    double get_l2_error(const double final_time) const {
     NonMatching::RegionUpdateFlags region_update_flags;
     region_update_flags.inside =
       update_values | update_JxW_values | update_quadrature_points;
