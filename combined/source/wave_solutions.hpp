@@ -19,7 +19,7 @@ using namespace dealii;
 template <int dim>
 struct SolutionSet
 {
-    // std::unique_ptr<Function<dim>> speed;
+    std::unique_ptr<Function<dim>> speed;
     std::unique_ptr<Function<dim>> analytical_solution;
     std::unique_ptr<Function<dim>> rhs_function;
     std::unique_ptr<Function<dim>> boundary_values;
@@ -27,25 +27,25 @@ struct SolutionSet
     std::unique_ptr<Function<dim>> derivative_function;
     double initial_time;
     double final_time;
-    double speed;
+    // double speed;
 };
 
 
 // ═══════════════════════════════════════════════════════
-//  SOLUTION 1: sin(x)sin(y)cos(sqrt(2)t)
+//  SOLUTION 0: sin(x)sin(y)cos(sqrt(2)t)
 // ═══════════════════════════════════════════════════════
 
-// template <int dim>
-// class Speed0 : public Function<dim>
-// {
-// public:
-//     double value(const Point<dim> &p,
-//                  const unsigned int component = 0) const override
-//     {
-//         (void)component;
-//         return 1.0;
-//     }
-// };
+template <int dim>
+class Speed0 : public Function<dim>
+{
+public:
+    double value(const Point<dim> &p,
+                 const unsigned int component = 0) const override
+    {
+        (void)component;
+        return 1.0;
+    }
+};
 
 template <int dim>
 class AnalyticalSolution0 : public Function<dim>
@@ -113,20 +113,20 @@ public:
 };
 
 // ═══════════════════════════════════════════════════════
-//  SOLUTION 2: Bessel function J0(alpha*r)cos(alpha*t)
+//  SOLUTION 1: Bessel function J0(alpha*r)cos(alpha*t)
 // ═══════════════════════════════════════════════════════
 
-// template <int dim>
-// class Speed1 : public Function<dim>
-// {
-// public:
-//     double value(const Point<dim> &p,
-//                  const unsigned int component = 0) const override
-//     {
-//         (void)component;
-//         return 1.0;
-//     }
-// };
+template <int dim>
+class Speed1 : public Function<dim>
+{
+public:
+    double value(const Point<dim> &p,
+                 const unsigned int component = 0) const override
+    {
+        (void)component;
+        return 1.0;
+    }
+};
 
 template <int dim>
 class AnalyticalSolution1 : public Function<dim>
@@ -197,6 +197,180 @@ public:
     }
 };
 
+// ═══════════════════════════════════════════════════════
+//  SOLUTION 2: Bessel function J0(alpha*r)cos(2*alpha*t), with non-unity speed
+// ═══════════════════════════════════════════════════════
+
+template <int dim>
+class Speed2 : public Function<dim>
+{
+public:
+    double value(const Point<dim> &p,
+                 const unsigned int component = 0) const override
+    {
+        (void)component;
+        return 4.0;
+    }
+};
+
+template <int dim>
+class AnalyticalSolution2 : public Function<dim>
+{
+public:
+    double value(const Point<dim> &p,
+                 const unsigned int component = 0) const override
+    {
+        (void)component;
+        const double t     = this->get_time();
+        const double alpha = 2.4048255577;
+        return std::cyl_bessel_j(0, alpha * p.norm()) * std::cos(2 * alpha * t);
+    }
+};
+
+template <int dim>
+class RHSFunction2 : public Function<dim>
+{
+public:
+    double value(const Point<dim> &p,
+                 const unsigned int component = 0) const override
+    {
+        (void)p; (void)component;
+        return 0.0;
+    }
+};
+
+template <int dim>
+class BoundaryValues2 : public Function<dim>
+{
+public:
+    double value(const Point<dim> &p,
+                 const unsigned int component = 0) const override
+    {
+        (void)component;
+        const double t     = this->get_time();
+        const double alpha = 2.4048255577;
+        return std::cyl_bessel_j(0, alpha * p.norm()) * std::cos(2 * alpha * t);
+    }
+};
+
+template <int dim>
+class InitialData2 : public Function<dim>
+{
+public:
+    double value(const Point<dim> &p,
+                 const unsigned int component = 0) const override
+    {
+        (void)component;
+        const double alpha = 2.4048255577;
+        return std::cyl_bessel_j(0, alpha * p.norm());
+    }
+};
+
+template <int dim>
+class DerivativeFunction2 : public Function<dim>
+{
+public:
+    double value(const Point<dim> &p,
+                 const unsigned int component = 0) const override
+    {
+        (void)component;
+        const double t     = this->get_time();
+        const double alpha = 2.4048255577;
+        // return -alpha * std::cyl_bessel_j(0, alpha * p.norm())
+        //               * std::sin(alpha * t);
+        return 0.0;
+    }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  SOLUTION 3: Bessel function J0(alpha*r)cos(2*alpha*t), with variable speed
+// ═══════════════════════════════════════════════════════════════════════════
+
+template <int dim>
+class Speed3 : public Function<dim>
+{
+public:
+    double value(const Point<dim> &p,
+                 const unsigned int component = 0) const override
+    {
+        (void)component;
+        return 1+p[0]*p[1];
+    }
+};
+
+template <int dim>
+class AnalyticalSolution3 : public Function<dim>
+{
+public:
+    double value(const Point<dim> &p,
+                 const unsigned int component = 0) const override
+    {
+        (void)component;
+        const double t     = this->get_time();
+        const double alpha = 2.4048255577;
+        return std::sin(p[0]) * std::sin(p[1]) * std::cos((2.0) * t);
+    }
+};
+
+template <int dim>
+class RHSFunction3 : public Function<dim>
+{
+public:
+    double value(const Point<dim> &p,
+                 const unsigned int component = 0) const override
+    {
+        (void)p; (void)component;
+        const double t = this->get_time();
+        return std::cos(2.0*t) * (
+    (-4.0 + 2.0*(1+p[0]*p[1])) * std::sin(p[0]) * std::sin(p[1])
+  - p[1] * std::cos(p[0]) * std::sin(p[1])
+  - p[0] * std::sin(p[0]) * std::cos(p[1]));
+    }
+};
+
+template <int dim>
+class BoundaryValues3 : public Function<dim>
+{
+public:
+    double value(const Point<dim> &p,
+                 const unsigned int component = 0) const override
+    {
+        (void)component;
+        const double t     = this->get_time();
+        const double alpha = 2.4048255577;
+        return std::sin(p[0]) * std::sin(p[1]) * std::cos((2.0) * t);
+    }
+};
+
+template <int dim>
+class InitialData3 : public Function<dim>
+{
+public:
+    double value(const Point<dim> &p,
+                 const unsigned int component = 0) const override
+    {
+        (void)component;
+        const double alpha = 2.4048255577;
+        return std::sin(p[0]) * std::sin(p[1]);
+    }
+};
+
+template <int dim>
+class DerivativeFunction3 : public Function<dim>
+{
+public:
+    double value(const Point<dim> &p,
+                 const unsigned int component = 0) const override
+    {
+        (void)component;
+        const double t     = this->get_time();
+        const double alpha = 2.4048255577;
+        // return -alpha * std::cyl_bessel_j(0, alpha * p.norm())
+        //               * std::sin(alpha * t);
+        return 0.0;
+    }
+};
+
 
 // ═══════════════════════════════════════════════════════
 //  FACTORY — one call returns all functions for a choice
@@ -216,8 +390,8 @@ SolutionSet<dim> make_solution(const int choice)
             s.derivative_function = std::make_unique<DerivativeFunction0<dim>>();
             s.initial_time        = 0.0;
             s.final_time          = 2.0 * M_PI / std::sqrt(2.0);
-            // s.speed               = std::make_unique<Speed0<dim>>();
-            s.speed               = 1.0;
+            s.speed               = std::make_unique<Speed0<dim>>();
+            // s.speed               = 1.0;
             break;
         case 1:
             {
@@ -229,8 +403,35 @@ SolutionSet<dim> make_solution(const int choice)
             s.derivative_function = std::make_unique<DerivativeFunction1<dim>>();
             s.initial_time        = 0.0;
             s.final_time          = 2.0 * M_PI / alpha;
-            // s.speed               = std::make_unique<Speed1<dim>>();
-            s.speed               = 1.0;
+            s.speed               = std::make_unique<Speed1<dim>>();
+            // s.speed               = 1.0;
+            break;
+            }
+        case 2:
+            {
+            const double alpha = 2.4048255577;
+            s.analytical_solution = std::make_unique<AnalyticalSolution2<dim>>();
+            s.rhs_function        = std::make_unique<RHSFunction2<dim>>();
+            s.boundary_values     = std::make_unique<BoundaryValues2<dim>>();
+            s.initial_data        = std::make_unique<InitialData2<dim>>();
+            s.derivative_function = std::make_unique<DerivativeFunction2<dim>>();
+            s.initial_time        = 0.0;
+            s.final_time          = M_PI / alpha;
+            s.speed               = std::make_unique<Speed2<dim>>();
+            // s.speed               = 4.0;
+            break;
+            }
+        case 3:
+            {
+            const double alpha = 2.4048255577;
+            s.analytical_solution = std::make_unique<AnalyticalSolution3<dim>>();
+            s.rhs_function        = std::make_unique<RHSFunction3<dim>>();
+            s.boundary_values     = std::make_unique<BoundaryValues3<dim>>();
+            s.initial_data        = std::make_unique<InitialData3<dim>>();
+            s.derivative_function = std::make_unique<DerivativeFunction3<dim>>();
+            s.initial_time        = 0.0;
+            s.final_time          = M_PI / alpha;
+            s.speed               = std::make_unique<Speed3<dim>>();
             break;
             }
         default:

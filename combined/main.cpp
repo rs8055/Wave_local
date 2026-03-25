@@ -10,12 +10,6 @@
 
 using namespace dealii;
 
-template <typename T, typename = void>
-struct has_speed : std::false_type {};
-template <typename T>
-struct has_speed<T, std::void_t<decltype(std::declval<T>().speed)>>
-    : std::true_type {};
-
 int main(int argc, char* argv[])
 {
   dealii::Utilities::MPI::MPI_InitFinalize mpi_initialization(argc, argv, 1);
@@ -70,17 +64,13 @@ int main(int argc, char* argv[])
     VectorType solution;
     discretization.initialize_dof_vector(solution);
 
-    double speed = 1.0;
-    if constexpr (has_speed<decltype(sol)>::value)
-        speed = sol.speed;
-
     // ── Matrices ────────────────────────────────────────────────
     StiffnessMatrixOperator<2> stiffness_matrix(discretization,
                                              gps,
                                              np,
                                              sol.rhs_function.get(),
                                              sol.boundary_values.get(),
-                                             speed);
+                                             sol.speed.get());
 
     TrilinosWrappers::SparseMatrix system_matrix;
     if (pde == 2)

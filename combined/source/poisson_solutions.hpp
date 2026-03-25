@@ -19,6 +19,7 @@ using namespace dealii;
 template <int dim>
 struct SolutionSet
 {
+    std::unique_ptr<Function<dim>> speed;
     std::unique_ptr<Function<dim>> analytical_solution;
     std::unique_ptr<Function<dim>> rhs_function;
     std::unique_ptr<Function<dim>> boundary_values;
@@ -28,6 +29,18 @@ struct SolutionSet
 // ═══════════════════════════════════════════════════════
 //  SOLUTION 1: sin(x)sin(y)
 // ═══════════════════════════════════════════════════════
+
+template <int dim>
+class Speed0 : public Function<dim>
+{
+public:
+    double value(const Point<dim> &p,
+                 const unsigned int component = 0) const override
+    {
+        (void)component;
+        return 1.0;
+    }
+};
 
 template <int dim>
 class AnalyticalSolution0 : public Function<dim>
@@ -72,6 +85,18 @@ public:
 // ═══════════════════════════════════════════════════════
 
 template <int dim>
+class Speed1 : public Function<dim>
+{
+public:
+    double value(const Point<dim> &p,
+                 const unsigned int component = 0) const override
+    {
+        (void)component;
+        return 1.0;
+    }
+};
+
+template <int dim>
 class AnalyticalSolution1 : public Function<dim>
 {
 public:
@@ -114,6 +139,18 @@ public:
 // ═══════════════════════════════════════════════════════
 //  SOLUTION 3: Bessel function J0(alpha*r)
 // ═══════════════════════════════════════════════════════
+
+template <int dim>
+class Speed2 : public Function<dim>
+{
+public:
+    double value(const Point<dim> &p,
+                 const unsigned int component = 0) const override
+    {
+        (void)component;
+        return 1.0;
+    }
+};
 
 template <int dim>
 class AnalyticalSolution2 : public Function<dim>
@@ -172,16 +209,19 @@ SolutionSet<dim> make_solution(const int choice)
             s.analytical_solution = std::make_unique<AnalyticalSolution0<dim>>();
             s.rhs_function        = std::make_unique<RHSFunction0<dim>>();
             s.boundary_values     = std::make_unique<BoundaryValues0<dim>>();
+            s.speed               = std::make_unique<Speed0<dim>>();
             break;
         case 1:
             s.analytical_solution = std::make_unique<AnalyticalSolution1<dim>>();
             s.rhs_function        = std::make_unique<RHSFunction1<dim>>();
             s.boundary_values     = std::make_unique<BoundaryValues1<dim>>();
+            s.speed               = std::make_unique<Speed1<dim>>();
             break;
         case 2:
             s.analytical_solution = std::make_unique<AnalyticalSolution2<dim>>();
             s.rhs_function        = std::make_unique<RHSFunction2<dim>>();
             s.boundary_values     = std::make_unique<BoundaryValues2<dim>>();
+            s.speed               = std::make_unique<Speed2<dim>>();
             break;
         default:
             AssertThrow(false, ExcMessage("Unknown solution choice: "

@@ -20,10 +20,11 @@ public:
   using VectorType = LinearAlgebra::distributed::Vector<Number>;
 
   StiffnessMatrixOperator(const Discretization<dim, Number>    &discretization, const double &gps, const double &np, Function<dim> *rhs,
-                    Function<dim> *bv, double speed)
+                    Function<dim> *bv, Function<dim> *speed)
     : discretization(discretization)
     , ghost_parameter_S(gps)
     , nitsche_parameter(np)
+    , speed(speed)
     , rhs_function(rhs)
     , boundary_condition(bv)
     , quadrature_1D(discretization.get_quadrature_1D())
@@ -55,6 +56,8 @@ private:
   const Discretization<dim, Number>    &discretization;
   double ghost_parameter_S;
   double nitsche_parameter;
+  // double speed;
+  Function<dim> *speed;
   Function<2> *rhs_function;
   Function<2> *boundary_condition;
   const QGauss<1> &quadrature_1D;
@@ -127,7 +130,8 @@ private:
                                                update_gradients |
                                                update_hessians |
                                                  update_JxW_values |
-                                                 update_normal_vectors);
+                                                 update_normal_vectors|
+                                             update_quadrature_points);
     
     NonMatching::RegionUpdateFlags region_update_flags;
     region_update_flags.inside = update_values | update_gradients |
@@ -161,12 +165,14 @@ private:
           for (const unsigned int q :
                inside_fe_values->quadrature_point_indices())
             {
+              const Point<dim> point= inside_fe_values->quadrature_point(q);
+                  double c_inside= speed->value(point);
               for (const unsigned int i : inside_fe_values->dof_indices())
                 {
                   for (const unsigned int j : inside_fe_values->dof_indices())
                     {
                       local_stiffness(i, j) +=
-                        inside_fe_values->shape_grad(i, q) *
+                        c_inside*inside_fe_values->shape_grad(i, q) *
                         inside_fe_values->shape_grad(j, q) *
                         inside_fe_values->JxW(q);
                     }
@@ -181,8 +187,8 @@ private:
             for (const unsigned int q :
                  surface_fe_values->quadrature_point_indices())
               {
-                // const Point<dim> &point =
-                //   surface_fe_values->quadrature_point(q);
+                const Point<dim> point= surface_fe_values->quadrature_point(q);
+                  double c_surface= speed->value(point);
                 const Tensor<1, dim> &normal =
                   surface_fe_values->normal_vector(q);
                 for (const unsigned int i : surface_fe_values->dof_indices())
@@ -198,7 +204,7 @@ private:
                            nitsche_parameter / cell_side_length *
                              surface_fe_values->shape_value(i, q) *
                              surface_fe_values->shape_value(j, q)) *
-                          surface_fe_values->JxW(q);
+                          surface_fe_values->JxW(q) * c_surface;
                       }
                   }
               }
@@ -231,17 +237,19 @@ private:
                 {
                   const Tensor<1, dim> normal =
                     fe_interface_values.normal(q);
+                  const Point<dim> point= fe_interface_values.quadrature_point(q);
+                  double c_interface= speed->value(point);
                   for (unsigned int i = 0; i < n_interface_dofs; ++i)
                     for (unsigned int j = 0; j < n_interface_dofs; ++j)
                       {
                         local_stabilization(i, j) +=
-                          .5 * ghost_parameter_S  *  cell_side_length * normal *
+                          .5 * ghost_parameter_S  *  c_interface * cell_side_length * normal *
                           fe_interface_values.jump_in_shape_gradients(i, q) *
                           normal *
                           fe_interface_values.jump_in_shape_gradients(j, q) *
                           fe_interface_values.JxW(q);
                         local_stabilization(i, j) +=
-                          .5 * ghost_parameter_S  *  std::pow(cell_side_length,3) * normal *
+                          .5 * ghost_parameter_S  *  c_interface * std::pow(cell_side_length,3) * normal *
                           fe_interface_values.jump_in_shape_hessians(i, q) * normal *
                           normal *
                           fe_interface_values.jump_in_shape_hessians(j, q) * normal *
@@ -340,6 +348,7 @@ private:
                   surface_fe_values->quadrature_point(q);
                 const Tensor<1, dim> &normal =
                   surface_fe_values->normal_vector(q);
+                double c_surface= speed->value(point);
 
                 // Evaluate g at θ*t^n + (1-θ)*t^{n-1}
                 const double g_value = boundary_condition->value(point);
@@ -347,7 +356,7 @@ private:
                 for (const unsigned int i : surface_fe_values->dof_indices())
                   {
                     local_rhs(i) +=
-                      g_value *
+                      g_value * c_surface *
                       (nitsche_parameter / cell_side_length *
                          surface_fe_values->shape_value(i, q) -
                        normal * surface_fe_values->shape_grad(i, q)) *

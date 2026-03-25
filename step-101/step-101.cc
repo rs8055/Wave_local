@@ -98,8 +98,8 @@ namespace Step101
     // const double t = this->get_time();
     // return (1. - 2. / dim * (point.norm_square() - 1.))* std::exp(-t);
 
-    return 2.0;
-    // return point[0]*point[1];
+    // return 2.0;
+    return 1+point[0]*point[1];
 
     // const double alpha_0 = 2.4048255577; // first zero of J0
     // return std::cyl_bessel_j(0, alpha_0 * point.norm()) * std::cos(alpha_0 * t);
@@ -130,7 +130,7 @@ namespace Step101
     return std::sin(point[0]) * std::sin(point[1]) * std::cos((2.0) * t);
 
     // const double alpha_0 = 2.4048255577; // first zero of J0
-    // return std::cyl_bessel_j(0, alpha_0 * point.norm()) * std::cos(alpha_0 * t);
+    // return std::cyl_bessel_j(0, alpha_0 * point.norm()) * std::cos(2 * alpha_0 * t);
 
   }
   
@@ -153,11 +153,14 @@ namespace Step101
     (void)component;
     const double t = this->get_time();
     // return (1. - 2. / dim * (p.norm_square() - 1.))* std::exp(-t) + 4* std::exp(-t);
-    return 0.0;
-  //   return std::cos(2.0*t) * (
-  //   (-4.0 + 2.0*p[0]*p[1]) * std::sin(p[0]) * std::sin(p[1])
-  // - p[1] * std::cos(p[0]) * std::sin(p[1])
-  // - p[0] * std::sin(p[0]) * std::cos(p[1]));
+    // return 0.0;
+
+    // const double alpha_0 = 2.4048255577; // first zero of J0
+    // return std::pow(alpha_0,2) * (-2) * std::cyl_bessel_j(0, alpha_0 * p.norm()) * std::cos(2 * alpha_0 * t);
+    return std::cos(2.0*t) * (
+    (-4.0 + 2.0*(1+p[0]*p[1])) * std::sin(p[0]) * std::sin(p[1])
+  - p[1] * std::cos(p[0]) * std::sin(p[1])
+  - p[0] * std::sin(p[0]) * std::cos(p[1]));
   }
 
   // ==================================================================
@@ -181,6 +184,9 @@ namespace Step101
     // return (1. - 2. / dim * (point.norm_square() - 1.))* std::exp(-t);
 
     return std::sin(point[0]) * std::sin(point[1]) * std::cos((2.0) * t);
+
+    // const double alpha_0 = 2.4048255577; // first zero of J0
+    // return std::cyl_bessel_j(0, alpha_0 * point.norm()) * std::cos(2 * alpha_0 * t);
 
 
     // return 0.0;
@@ -278,7 +284,7 @@ namespace Step101
     const FE_Q<dim> fe_level_set;
     DoFHandler<dim> level_set_dof_handler;
     LinearAlgebra::distributed::Vector<double>  level_set;
-    LinearAlgebra::distributed::Vector<double>  wave_speed_set;
+    // LinearAlgebra::distributed::Vector<double>  wave_speed_set;
 
     // The second DoFHandler manages the DoFs for the solution of the Poisson
     // equation.
@@ -464,7 +470,7 @@ namespace Step101
     derivative_solution.reinit(solution);
     old_derivative_solution.reinit(solution);
     rhs.reinit(solution);
-    wave_speed_set.reinit(solution);
+    // wave_speed_set.reinit(solution);
   }
 
 
@@ -509,10 +515,10 @@ namespace Step101
     FullMatrix<double> local_mass(n_dofs_per_cell, n_dofs_per_cell);
     FullMatrix<double> local_stiffness(n_dofs_per_cell, n_dofs_per_cell);
 
-    VectorTools::interpolate(dof_handler,
-                             wave_speed,
-                             wave_speed_set);
-    wave_speed_set.update_ghost_values();
+    // VectorTools::interpolate(dof_handler,
+    //                          wave_speed,
+    //                          wave_speed_set);
+    // wave_speed_set.update_ghost_values();
 
     // The below local_rhs will be assembled later on because now it will depend upon time value too while the LHS system matrix is independent of time. Consequently
     // all the rhs assembly is deleted
@@ -520,8 +526,9 @@ namespace Step101
     std::vector<types::global_dof_index> local_dof_indices(n_dofs_per_cell);
 
     const double ghost_parameter_1   = 0.25 * std::sqrt(3.0);
-    const double ghost_parameter_2   = 0.5 * std::sqrt(3.0);
-    const double nitsche_parameter = 5 * (fe_degree) * fe_degree;
+    const double ghost_parameter_2   = 0.50 * std::sqrt(3.0);
+    // const double nitsche_parameter = 5 * (fe_degree) * fe_degree;
+    const double nitsche_parameter = 20;
 
     // Since the ghost penalty is similar to a DG flux term, the simplest way to
     // assemble it is to use an FEInterfaceValues object.
@@ -531,7 +538,8 @@ namespace Step101
                                                update_gradients |
                                                update_hessians |
                                                  update_JxW_values |
-                                                 update_normal_vectors);
+                                                 update_normal_vectors|
+                                             update_quadrature_points);
 
     const QGauss<1> quadrature_1D(fe_degree + 1);
 
@@ -569,19 +577,21 @@ namespace Step101
 
         if (inside_fe_values)
         {
-          std::vector<double> c_values(inside_fe_values->n_quadrature_points);
-          inside_fe_values->get_function_values(wave_speed_set, c_values);  
+          // std::vector<double> c_values(inside_fe_values->n_quadrature_points);
+          // inside_fe_values->get_function_values(wave_speed_set, c_values);  
+
           for (const unsigned int q :
                inside_fe_values->quadrature_point_indices())
             {
-              // const Point<dim> &point = inside_fe_values->quadrature_point(q);
+              const Point<dim> point= inside_fe_values->quadrature_point(q);
+                  double c_inside= wave_speed.value(point);
               for (const unsigned int i : inside_fe_values->dof_indices())
                 {
                   for (const unsigned int j : inside_fe_values->dof_indices())
                     {
-                      local_stiffness(i, j) +=
-                          c_values[q] *   
-                          inside_fe_values->shape_grad(i, q) *
+                      local_stiffness(i, j) +=    
+                      c_inside *
+                      inside_fe_values->shape_grad(i, q) *
                           inside_fe_values->shape_grad(j, q) *
                           inside_fe_values->JxW(q);
                       local_mass(i, j) +=
@@ -601,13 +611,13 @@ namespace Step101
 
         if (surface_fe_values)
           {
-            std::vector<double> c_surf(surface_fe_values->n_quadrature_points);
-            surface_fe_values->get_function_values(wave_speed_set, c_surf); 
+            // std::vector<double> c_surf(surface_fe_values->n_quadrature_points);
+            // surface_fe_values->get_function_values(wave_speed_set, c_surf); 
             for (const unsigned int q :
                  surface_fe_values->quadrature_point_indices())
               {
-                // const Point<dim> &point =
-                //   surface_fe_values->quadrature_point(q);
+                const Point<dim> point= surface_fe_values->quadrature_point(q);
+                  double c_surface= wave_speed.value(point);
                 const Tensor<1, dim> &normal =
                   surface_fe_values->normal_vector(q);
                 for (const unsigned int i : surface_fe_values->dof_indices())
@@ -615,14 +625,14 @@ namespace Step101
                     for (const unsigned int j : surface_fe_values->dof_indices())
                       {
                           local_stiffness(i, j) +=
-                            (c_surf[q]*(-normal * surface_fe_values->shape_grad(i, q) *
+                            (-normal * surface_fe_values->shape_grad(i, q) *
                               surface_fe_values->shape_value(j, q) +
                             -normal * surface_fe_values->shape_grad(j, q) *
-                              surface_fe_values->shape_value(i, q) )+
+                              surface_fe_values->shape_value(i, q) +
                             nitsche_parameter / cell_side_length *
                               surface_fe_values->shape_value(i, q) *
                               surface_fe_values->shape_value(j, q)) *
-                            surface_fe_values->JxW(q);
+                            surface_fe_values->JxW(q) * c_surface;
                       }
                   }
               }
@@ -651,13 +661,16 @@ namespace Step101
               FullMatrix<double> local_mass_stabilization(n_interface_dofs,
                                                      n_interface_dofs);
               FullMatrix<double> local_stabilization(n_interface_dofs,
-                                                     n_interface_dofs);
+                                                     n_interface_dofs);                                    
               for (unsigned int q = 0;
                    q < fe_interface_values.n_quadrature_points;
                    ++q)
                 {
                   const Tensor<1, dim> normal =
                     fe_interface_values.normal(q);
+                  const Point<dim> point= fe_interface_values.quadrature_point(q);
+                  double c_interface= wave_speed.value(point);
+                  // std::cout<<point[0]<<" "<< point[1]<<" "<<c_interface<<std::endl;
                   for (unsigned int i = 0; i < n_interface_dofs; ++i)
                     for (unsigned int j = 0; j < n_interface_dofs; ++j)
                       {
@@ -674,44 +687,17 @@ namespace Step101
                           fe_interface_values.jump_in_shape_hessians(j, q) * normal *
                           fe_interface_values.JxW(q);                
                         local_stabilization(i, j) +=
-                          .5 * ghost_parameter_2  *  cell_side_length * normal *
+                          .5 * ghost_parameter_2 * c_interface * cell_side_length * normal *
                           fe_interface_values.jump_in_shape_gradients(i, q) *
                           normal *
                           fe_interface_values.jump_in_shape_gradients(j, q) *
                           fe_interface_values.JxW(q);
                         local_stabilization(i, j) +=
-                          .5 * ghost_parameter_2  *  std::pow(cell_side_length,3) * normal *
+                          .5 * ghost_parameter_2 * c_interface * std::pow(cell_side_length,3) * normal *
                           fe_interface_values.jump_in_shape_hessians(i, q) * normal *
                           normal *
                           fe_interface_values.jump_in_shape_hessians(j, q) * normal *
                           fe_interface_values.JxW(q);
-
-                        // double jump_normal_hessian_i = 0.0;
-                        // double jump_normal_hessian_j = 0.0;
-
-                        // const Tensor<2, dim> jump_hess_i =
-                        //   fe_interface_values.jump_in_shape_hessians(i, q);
-                        // const Tensor<2, dim> jump_hess_j =
-                        //   fe_interface_values.jump_in_shape_hessians(j, q);
-
-                        // for (unsigned int d1 = 0; d1 < dim; ++d1)
-                        //   for (unsigned int d2 = 0; d2 < dim; ++d2)
-                        //     {
-                        //       jump_normal_hessian_i += normal[d1] * jump_hess_i[d1][d2] * normal[d2];
-                        //       jump_normal_hessian_j += normal[d1] * jump_hess_j[d1][d2] * normal[d2];
-                        //     }
-
-                        // // h^5 mass ghost penalty for 2nd derivative jump
-                        // local_mass_stabilization(i, j) +=
-                        //   0.5 * ghost_parameter_1 * 0.20 * std::pow(cell_side_length, 5) *
-                        //   jump_normal_hessian_i * jump_normal_hessian_j *
-                        //   fe_interface_values.JxW(q);
-
-                        // // h^3 stiffness ghost penalty for 2nd derivative jump  
-                        // local_stabilization(i, j) +=
-                        //   0.5 * ghost_parameter_2 * 0.20 * std::pow(cell_side_length, 3) *
-                        //   jump_normal_hessian_i * jump_normal_hessian_j *
-                        //   fe_interface_values.JxW(q);
                       }
                 }
 
@@ -823,13 +809,12 @@ namespace Step101
 
         if (surface_fe_values)
           {
-            std::vector<double> c_surf(surface_fe_values->n_quadrature_points);
-            surface_fe_values->get_function_values(wave_speed_set, c_surf);
             for (const unsigned int q :
                  surface_fe_values->quadrature_point_indices())
               {
                 const Point<dim> &point =
                   surface_fe_values->quadrature_point(q);
+                  double c_surface= wave_speed.value(point);
                 const Tensor<1, dim> &normal =
                   surface_fe_values->normal_vector(q);
 
@@ -840,10 +825,10 @@ namespace Step101
                 for (const unsigned int i : surface_fe_values->dof_indices())
                   {
                     local_rhs(i) +=
-                      g_value *
+                      g_value * c_surface *
                       (nitsche_parameter / cell_side_length *
                          surface_fe_values->shape_value(i, q) -
-                       c_surf[q]*normal * surface_fe_values->shape_grad(i, q)) *
+                       normal * surface_fe_values->shape_grad(i, q)) *
                       surface_fe_values->JxW(q);
                   }
               }
@@ -908,6 +893,8 @@ namespace Step101
     data_out.set_cell_selection(
       [this](const typename Triangulation<dim>::cell_iterator &cell) {
         return cell->is_active() && cell->is_locally_owned() &&
+               mesh_classifier.location_to_level_set(cell) !=
+                 NonMatching::LocationToLevelSet::outside;
                mesh_classifier.location_to_level_set(cell) !=
                  NonMatching::LocationToLevelSet::outside;
       });
@@ -1018,11 +1005,11 @@ namespace Step101
                                old_derivative_solution);                      
 
         double error_L2;               
-        const double alpha_0 = 2.4048255577; // first zero of J0
-        const double pi = std::acos(-1.0);  
-        // final_time = 2.0 * pi / alpha_0;
+        const double alpha_0 = 2.4048255577; // first zero of J0 
+        // final_time = M_PI /(alpha_0);
         // final_time = 2.0 * M_PI / std::sqrt(2.0);
         final_time = M_PI;
+        // final_time = std::sqrt(2.0) * M_PI;
         
         while(time<final_time-1e-6)
         {

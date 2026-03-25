@@ -19,14 +19,14 @@ using namespace dealii;
 template <int dim>
 struct SolutionSet
 {
-    // std::unique_ptr<Function<dim>> speed;
+    std::unique_ptr<Function<dim>> speed;
     std::unique_ptr<Function<dim>> analytical_solution;
     std::unique_ptr<Function<dim>> rhs_function;
     std::unique_ptr<Function<dim>> boundary_values;
     std::unique_ptr<Function<dim>> initial_data;
     double initial_time;
     double final_time;
-    double speed;
+    // double speed;
 };
 
 
@@ -34,17 +34,17 @@ struct SolutionSet
 //  SOLUTION 1: sin(x)sin(y)exp(-2t)
 // ═══════════════════════════════════════════════════════
 
-// template <int dim>
-// class Speed0 : public Function<dim>
-// {
-// public:
-//     double value(const Point<dim> &p,
-//                  const unsigned int component = 0) const override
-//     {
-//         (void)component;
-//         return 1.0;
-//     }
-// };
+template <int dim>
+class Speed0 : public Function<dim>
+{
+public:
+    double value(const Point<dim> &p,
+                 const unsigned int component = 0) const override
+    {
+        (void)component;
+        return 1.0;
+    }
+};
 
 template <int dim>
 class AnalyticalSolution0 : public Function<dim>
@@ -101,17 +101,17 @@ public:
 //  SOLUTION 2: (1 - 2/dim*(|x|^2 - 1)) * exp(-t)
 // ═══════════════════════════════════════════════════════
 
-// template <int dim>
-// class Speed1 : public Function<dim>
-// {
-// public:
-//     double value(const Point<dim> &p,
-//                  const unsigned int component = 0) const override
-//     {
-//         (void)component;
-//         return 1.0;
-//     }
-// };
+template <int dim>
+class Speed1 : public Function<dim>
+{
+public:
+    double value(const Point<dim> &p,
+                 const unsigned int component = 0) const override
+    {
+        (void)component;
+        return 1.0;
+    }
+};
 
 template <int dim>
 class AnalyticalSolution1 : public Function<dim>
@@ -169,17 +169,17 @@ public:
 //  SOLUTION 3: Bessel function J0(alpha*r)exp(-2*t)
 // ═══════════════════════════════════════════════════════
 
-// template <int dim>
-// class Speed2 : public Function<dim>
-// {
-// public:
-//     double value(const Point<dim> &p,
-//                  const unsigned int component = 0) const override
-//     {
-//         (void)component;
-//         return 1.0;
-//     }
-// };
+template <int dim>
+class Speed2 : public Function<dim>
+{
+public:
+    double value(const Point<dim> &p,
+                 const unsigned int component = 0) const override
+    {
+        (void)component;
+        return 1.0;
+    }
+};
 
 template <int dim>
 class AnalyticalSolution2 : public Function<dim>
@@ -255,8 +255,8 @@ SolutionSet<dim> make_solution(const int choice)
             s.initial_data        = std::make_unique<InitialData0<dim>>();
             s.initial_time        = 0.0;
             s.final_time          = 1.0;
-            // s.speed               = std::make_unique<Speed0<dim>>();
-            s.speed               = 1.0;
+            s.speed               = std::make_unique<Speed0<dim>>();
+            // s.speed               = 1.0;
             break;
         case 1:
             s.analytical_solution = std::make_unique<AnalyticalSolution1<dim>>();
@@ -265,8 +265,8 @@ SolutionSet<dim> make_solution(const int choice)
             s.initial_data        = std::make_unique<InitialData1<dim>>();
             s.initial_time        = 0.0;
             s.final_time          = 1.0;
-            // s.speed               = std::make_unique<Speed1<dim>>();
-            s.speed               = 1.0;
+            s.speed               = std::make_unique<Speed1<dim>>();
+            // s.speed               = 1.0;
             break;
         case 2:
             s.analytical_solution = std::make_unique<AnalyticalSolution2<dim>>();
@@ -275,8 +275,8 @@ SolutionSet<dim> make_solution(const int choice)
             s.initial_data        = std::make_unique<InitialData2<dim>>();
             s.initial_time        = 0.0;
             s.final_time          = 1.0;
-            // s.speed               = std::make_unique<Speed2<dim>>();
-            s.speed               = 1.0;
+            s.speed               = std::make_unique<Speed2<dim>>();
+            // s.speed               = 1.0;
             break;
         default:
             AssertThrow(false, ExcMessage("Unknown solution choice: "
