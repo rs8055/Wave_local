@@ -1,5 +1,5 @@
 ##
-#  CMake script for the step-99 tutorial program:
+#  CMake script for the step-101tutorial program:
 ##
 
 # Set the name of the project and target:
@@ -25,7 +25,6 @@ cmake_minimum_required(VERSION 3.13.4)
 
 find_package(deal.II 9.7.1
   HINTS ${deal.II_DIR} ${DEAL_II_DIR} $ENV{DEAL_II_DIR}
-        /home/ritesh/Downloads/dealii_local
 )
 if(NOT ${deal.II_FOUND})
   message(FATAL_ERROR "\n"

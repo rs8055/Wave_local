@@ -26,9 +26,9 @@ struct has_initial_data<T, std::void_t<decltype(std::declval<T>().initial_data)>
     : std::true_type {};
 
 template <typename T, typename = void>
-struct has_derivative_function : std::false_type {};
+struct has_derivative_initial_data : std::false_type {};
 template <typename T>
-struct has_derivative_function<T, std::void_t<decltype(std::declval<T>().derivative_function)>>
+struct has_derivative_initial_data<T, std::void_t<decltype(std::declval<T>().derivative_initial_data)>>
     : std::true_type {};
 
 // ── Solver class ────────────────────────────────────────────────
@@ -59,11 +59,11 @@ public:
   // ── Main entry point ────────────────────────────────────────
   void solve()
   {
-    if (pde_type==2)
+    if (pde_type==0)
       solve_poisson();
     else if (pde_type==1)
       solve_heat();
-    else
+    else if (pde_type==2)
       solve_wave();
   }
 
@@ -94,20 +94,13 @@ private:
 
   // ── Solve: system_matrix * solution_out = rhs(t) - K*previous_u
   void solve_at_time(const double      t,
-                     const VectorType &previous_u,
+                     const VectorType       &previous_u,
                      VectorType       &solution_out)  // must be non-const ref
   {
     VectorType rhs, tmp;
     discretization.initialize_dof_vector(rhs);
     discretization.initialize_dof_vector(tmp);
-
-    rhs = stiffness.get_rhs_matrix(t);
-
-    if (pde_type != 2)  // Heat/Wave: subtract K*u term
-    {
-      stiffness.get_stiffness_matrix().vmult(tmp, previous_u);
-      rhs.add(-1.0, tmp);
-    }
+    stiffness.get_rhs_matrix(rhs,t,previous_u);
 
     solver_direct.solve(solution_out, rhs);
   }
@@ -180,7 +173,7 @@ private:
   {
     if constexpr (has_initial_data<SolutionSet>::value       &&
                   has_final_time<SolutionSet>::value          &&
-                  has_derivative_function<SolutionSet>::value)
+                  has_derivative_initial_data<SolutionSet>::value)
     {
       VectorType old_u, old_v;
       discretization.initialize_dof_vector(old_u);
@@ -188,7 +181,7 @@ private:
       VectorTools::interpolate(discretization.get_dof_handler(),
                                *sol.initial_data,        old_u);
       VectorTools::interpolate(discretization.get_dof_handler(),
-                               *sol.derivative_function, old_v);
+                               *sol.derivative_initial_data, old_v);
 
       double t        = sol.initial_time;
       const double dt = cfl * discretization.get_dx();

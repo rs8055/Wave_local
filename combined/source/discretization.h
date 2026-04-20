@@ -49,14 +49,16 @@ public:
     const unsigned int                          fe_degree,
     unsigned int                          n_subdivisions_1D,
     const double                                geometry_left,
-    const double                                geometry_right
-    // const unsigned int                          n_components        = 1,
-    // const unsigned int                          level_set_fe_degree = 1,
-    // std::shared_ptr<Function<dim>>              level_set_function  = nullptr,
-    // std::function<Point<dim>(const Point<dim>&)> mapping_q_cache_function = nullptr
+    const double                                geometry_right,
+    Function<dim>                             *lsf,
+    const bool                                cavity_in,
+    const bool                                composite_in
   ): tria(MPI_COMM_WORLD)
     , level_set_dof_handler(tria)
     , dof_handler(tria)
+    , level_set_function(lsf)
+    , cavity(cavity_in)
+    , composite(composite_in)
     , quadrature_1D(fe_degree + 1)  
     , face_quadrature(fe_degree + 1)
   {
@@ -67,9 +69,21 @@ public:
     dx = (geometry_right - geometry_left) / n_subdivisions_1D;
 
 
+
+
     // ── Level set ────────────────────────────────────────────────
     level_set_dof_handler.distribute_dofs(FE_Q<dim>(fe_degree));
 
+    NonMatching::LocationToLevelSet location =
+      (!composite && cavity)
+        ? NonMatching::LocationToLevelSet::outside
+        : NonMatching::LocationToLevelSet::inside;
+
+    const NonMatching::LocationToLevelSet inverse_location =
+      (location == NonMatching::LocationToLevelSet::inside) ?
+        NonMatching::LocationToLevelSet::outside :
+        NonMatching::LocationToLevelSet::inside;
+    
     const auto level_set_partitioner = std::make_shared<const Utilities::MPI::Partitioner>(
       level_set_dof_handler.locally_owned_dofs(),
       DoFTools::extract_locally_relevant_dofs(level_set_dof_handler),
@@ -77,9 +91,13 @@ public:
     level_set.reinit(level_set_partitioner);
 
     const Functions::SignedDistance::Sphere<dim> signed_distance_sphere;
+    const Function<dim> &lsf_to_use = (level_set_function != nullptr) 
+                                        ? *level_set_function 
+                                        : static_cast<const Function<dim>&>(signed_distance_sphere);
+
     VectorTools::interpolate(level_set_dof_handler,
-                             signed_distance_sphere,
-                             level_set);
+                            lsf_to_use,
+                            level_set);
     level_set.update_ghost_values();
 
     mesh_classifier = std::make_shared<NonMatching::MeshClassifier<dim>>(
@@ -91,14 +109,20 @@ public:
 
     for (const auto &cell : dof_handler.active_cell_iterators() |
            IteratorFilters::LocallyOwnedCell())
-      {
-        const NonMatching::LocationToLevelSet cell_location =
-          mesh_classifier->location_to_level_set(cell);
-
-        if (cell_location == NonMatching::LocationToLevelSet::outside)
-          cell->set_active_fe_index(ActiveFEIndex::nothing);
-        else
+      {        
+        if(composite)
+        {
           cell->set_active_fe_index(ActiveFEIndex::lagrange);
+        }
+        else
+        {
+          const NonMatching::LocationToLevelSet cell_location =
+            mesh_classifier->location_to_level_set(cell);
+          if (cell_location == inverse_location)
+            cell->set_active_fe_index(ActiveFEIndex::nothing);
+          else
+            cell->set_active_fe_index(ActiveFEIndex::lagrange); 
+        }
       }
 
     dof_handler.distribute_dofs(fe_collection);
@@ -153,14 +177,17 @@ public:
 
 private:
   parallel::distributed::Triangulation<dim>          tria;
-  QGauss<1>                                      quadrature_1D;
-  QGauss<dim - 1>                                face_quadrature;
-  AffineConstraints<Number>                          constraints;
   DoFHandler<dim>                                    level_set_dof_handler;
+  DoFHandler<dim>                                    dof_handler;
+  const Function<dim>                                *level_set_function;
+  bool                                               cavity;
+  bool                                               composite;
+  QGauss<1>                                          quadrature_1D;
+  QGauss<dim - 1>                                    face_quadrature;
+  AffineConstraints<Number>                          constraints;  
   VectorType                                         level_set;
   std::shared_ptr<NonMatching::MeshClassifier<dim>>  mesh_classifier;
-  hp::FECollection<dim>                              fe_collection;
-  DoFHandler<dim>                                    dof_handler;
+  hp::FECollection<dim>                              fe_collection; 
   double                                             dx;
   std::shared_ptr<const Utilities::MPI::Partitioner> partitioner;
 };

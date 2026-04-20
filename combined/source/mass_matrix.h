@@ -19,9 +19,11 @@ class MassMatrixOperator
 public:
   using VectorType = LinearAlgebra::distributed::Vector<Number>;
 
-  MassMatrixOperator(const Discretization<dim, Number>    &discretization, const double &gpm)
+  MassMatrixOperator(const Discretization<dim, Number>    &discretization, const double &gpm, const NonMatching::LocationToLevelSet location =
+                       NonMatching::LocationToLevelSet::inside)
     : discretization(discretization)
     , ghost_parameter_M(gpm)
+    , location(location)
     , quadrature_1D(discretization.get_quadrature_1D())
     , face_quadrature(discretization.get_face_quadrature())
     , constraints(discretization.get_affine_constraints())
@@ -43,6 +45,7 @@ public:
 private:
   const Discretization<dim, Number>    &discretization;
   double ghost_parameter_M;
+  const NonMatching::LocationToLevelSet location;
   const QGauss<1> &quadrature_1D;
   const QGauss<dim - 1> &face_quadrature;
   const AffineConstraints<Number> &constraints;
@@ -58,6 +61,10 @@ private:
   void
   compute_sparse_matrix() const
   { 
+    const NonMatching::LocationToLevelSet inverse_location =
+      (location == NonMatching::LocationToLevelSet::inside) ?
+        NonMatching::LocationToLevelSet::outside :
+        NonMatching::LocationToLevelSet::inside;
     const auto face_has_ghost_penalty = [&](const auto        &cell,
                                             const unsigned int face_index) {
       if (cell->at_boundary(face_index))
@@ -70,11 +77,11 @@ private:
         mesh_classifier.location_to_level_set(cell->neighbor(face_index));
 
       if (cell_location == NonMatching::LocationToLevelSet::intersected &&
-          neighbor_location != NonMatching::LocationToLevelSet::outside)
+          neighbor_location != inverse_location)
         return true;
 
       if (neighbor_location == NonMatching::LocationToLevelSet::intersected &&
-          cell_location != NonMatching::LocationToLevelSet::outside)
+          cell_location != inverse_location)
         return true;
 
       return false;
@@ -84,11 +91,11 @@ private:
     sparsity_pattern.reinit(dof_handler.locally_owned_dofs(),
                             dof_handler.get_communicator());
 
-    const unsigned int           n_components = fe_collection.n_components();
-    Table<2, DoFTools::Coupling> cell_coupling(n_components, n_components);
-    Table<2, DoFTools::Coupling> face_coupling(n_components, n_components);
-    cell_coupling[0][0] = DoFTools::always;
-    face_coupling[0][0] = DoFTools::always;
+    // const unsigned int           n_components = fe_collection.n_components();
+    // Table<2, DoFTools::Coupling> cell_coupling(n_components, n_components);
+    // Table<2, DoFTools::Coupling> face_coupling(n_components, n_components);
+    // cell_coupling[0][0] = DoFTools::always;
+    // face_coupling[0][0] = DoFTools::always;
 
     const bool                      keep_constrained_dofs = true;
 
@@ -96,10 +103,7 @@ private:
                                          sparsity_pattern,
                                          constraints,
                                          keep_constrained_dofs,
-                                         cell_coupling,
-                                         face_coupling,
-                                         numbers::invalid_subdomain_id,
-                                         face_has_ghost_penalty);
+                                         numbers::invalid_subdomain_id);
     sparsity_pattern.compress();
     sparse_matrix.reinit(sparsity_pattern);
 
@@ -107,19 +111,18 @@ private:
     FullMatrix<double> local_mass(n_dofs_per_cell, n_dofs_per_cell);
     std::vector<types::global_dof_index> local_dof_indices(n_dofs_per_cell);
 
-    FEInterfaceValues<dim> fe_interface_values(fe_collection[0],
-                                               face_quadrature,
-                                               update_gradients |
-                                               update_hessians |
-                                                 update_JxW_values |
-                                                 update_normal_vectors);
-    
     NonMatching::RegionUpdateFlags region_update_flags;
-    region_update_flags.inside = update_values | update_gradients |
-                                 update_hessians | update_JxW_values | update_quadrature_points;
+    if (location == NonMatching::LocationToLevelSet::inside)
+      region_update_flags.inside = update_values | update_gradients |
+                                   update_hessians | update_JxW_values | update_quadrature_points;
+    else if (location == NonMatching::LocationToLevelSet::outside)
+      region_update_flags.outside = update_values | update_gradients |
+                                    update_hessians | update_JxW_values | update_quadrature_points;
+    else
+      AssertThrow(false, ExcNotImplemented());
     region_update_flags.surface = update_values | update_gradients | update_hessians | 
                                   update_JxW_values | update_quadrature_points |
-                                  update_normal_vectors;
+                                  update_normal_vectors;                              
 
     NonMatching::FEValues<dim> non_matching_fe_values(fe_collection,
                                                       quadrature_1D,
@@ -127,33 +130,44 @@ private:
                                                       mesh_classifier,
                                                       level_set_dof_handler,
                                                       level_set);
+
+    FEInterfaceValues<dim> fe_interface_values(fe_collection[0],
+                                               face_quadrature,
+                                               update_gradients |
+                                               update_hessians |
+                                                 update_JxW_values |
+                                                 update_normal_vectors);                                                  
                                                       
     for (const auto &cell :
          dof_handler.active_cell_iterators() |
            IteratorFilters::LocallyOwnedCell() |
            IteratorFilters::ActiveFEIndexEqualTo(Discretization<dim>::ActiveFEIndex::lagrange))
-      {
+      if (mesh_classifier.location_to_level_set(cell) !=
+           inverse_location)
+        {
         local_mass = 0;
 
         const double cell_side_length = cell->minimum_vertex_distance();
 
         non_matching_fe_values.reinit(cell);
 
-        const std::optional<FEValues<dim>> &inside_fe_values =
-          non_matching_fe_values.get_inside_fe_values();
+        const auto &fe_values =
+            (location == NonMatching::LocationToLevelSet::inside) ?
+              non_matching_fe_values.get_inside_fe_values() :
+              non_matching_fe_values.get_outside_fe_values();
 
-        if (inside_fe_values)
+        if (fe_values)
           for (const unsigned int q :
-               inside_fe_values->quadrature_point_indices())
+               fe_values->quadrature_point_indices())
             {
-              for (const unsigned int i : inside_fe_values->dof_indices())
+              for (const unsigned int i : fe_values->dof_indices())
                 {
-                  for (const unsigned int j : inside_fe_values->dof_indices())
+                  for (const unsigned int j : fe_values->dof_indices())
                     {
                       local_mass(i, j) +=
-                        inside_fe_values->shape_value(i, q) *
-                        inside_fe_values->shape_value(j, q) *
-                        inside_fe_values->JxW(q);
+                        fe_values->shape_value(i, q) *
+                        fe_values->shape_value(j, q) *
+                        fe_values->JxW(q);
                     }
                 }
             }
@@ -210,7 +224,7 @@ private:
               sparse_matrix.add(local_interface_dof_indices,
                                    local_mass_stabilization);
             }
-      }
+        }
 
     sparse_matrix.compress(VectorOperation::add);       
     for (auto &entry : sparse_matrix)

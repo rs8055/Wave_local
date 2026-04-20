@@ -27,6 +27,7 @@
 #include <deal.II/base/quadrature_lib.h>
 #include <deal.II/base/tensor.h>
 
+#include <deal.II/distributed/tria.h>
 #include <deal.II/dofs/dof_tools.h>
 
 #include <deal.II/fe/fe_interface_values.h>
@@ -45,11 +46,16 @@
 #include <deal.II/lac/affine_constraints.h>
 #include <deal.II/lac/dynamic_sparsity_pattern.h>
 #include <deal.II/lac/full_matrix.h>
+#include <deal.II/lac/la_parallel_vector.h>
 #include <deal.II/lac/precondition.h>
 #include <deal.II/lac/solver_cg.h>
 #include <deal.II/lac/solver_control.h>
 #include <deal.II/lac/sparse_matrix.h>
 #include <deal.II/lac/sparsity_pattern.h>
+#include <deal.II/lac/trilinos_precondition.h>
+#include <deal.II/lac/trilinos_solver.h>
+#include <deal.II/lac/trilinos_sparse_matrix.h>
+#include <deal.II/lac/trilinos_sparsity_pattern.h>
 #include <deal.II/lac/vector.h>
 
 #include <deal.II/numerics/data_out.h>
@@ -57,6 +63,8 @@
 
 #include <fstream>
 #include <vector>
+#include <iomanip>
+#include <cmath>
 
 // The first new header contains some common level set functions.
 // For example, the spherical geometry that we use here.
@@ -73,6 +81,39 @@
 namespace Step99
 {
   using namespace dealii;
+  // ==================================================================
+  // Diffusion
+  // ==================================================================
+  template <int dim>
+  class Diffusion : public Function<dim>
+  {
+  public:
+    double value(const Point<dim>  &point,
+                 const unsigned int component = 0) const override;
+  };
+
+  template <int dim>
+  double Diffusion<dim>::value(const Point<dim>  &point,
+                                        const unsigned int component) const
+  {
+    AssertIndexRange(component, this->n_components);
+    (void)component;
+    // const double t = this->get_time();
+    // return (1. - 2. / dim * (point.norm_square() - 1.))* std::exp(-t);
+
+    // return 2.0;
+    // if point.norm()<1+1e-12{
+    //   return 10;
+    // }
+    // else{
+    //   return 1;
+    // }
+
+    return 1;
+    // const double alpha_0 = 2.4048255577; // first zero of J0
+    // return std::cyl_bessel_j(0, alpha_0 * point.norm()) * std::cos(alpha_0 * t);
+
+  }
   // ==================================================================
   // Analytic Solution
   // ==================================================================
@@ -92,7 +133,7 @@ namespace Step99
     (void)component;
     const double t = this->get_time();
     return (1. - 2. / dim * (point.norm_square() - 1.))* std::exp(-t);
-    //return std::pow(point[0],9) * std::pow(point[1],8) * std::exp(-t);
+    // return std::pow(point[0],9) * std::pow(point[1],8) * std::exp(-t);
   }
   
   // ==================================================================
@@ -116,7 +157,7 @@ namespace Step99
     return - (1. - 2. / dim * (p.norm_square() - 1.))* std::exp(-t) + 4* std::exp(-t);
     //const double g = 1.0 - 2.0 / dim * (p.norm_square() - 1.0);
     //return std::exp(-t) * (4.0 - g);
-    //return -std::pow(p[0], 7.0) * std::pow(p[1], 6.0) * std::exp(-t) *
+    // return -std::pow(p[0], 7.0) * std::pow(p[1], 6.0) * std::exp(-t) *
     //                 (std::pow(p[0], 2.0) * std::pow(p[1], 2.0) +
     //                  72 * std::pow(p[1], 2.0) + 56 * std::pow(p[0], 2.0));
   }
@@ -140,7 +181,7 @@ namespace Step99
     (void)component;
     const double t = this->get_time();
     return (1. - 2. / dim * (point.norm_square() - 1.))* std::exp(-t);
-    //return std::pow(point[0],9) * std::pow(point[1],8) * std::exp(-t);
+    // return std::pow(point[0],9) * std::pow(point[1],8) * std::exp(-t);
   }
 
 
@@ -162,7 +203,7 @@ namespace Step99
     AssertIndexRange(component, this->n_components);
     (void)component;
     return 1.0 - 2.0 / dim * (p.norm_square() - 1.0);
-    //return std::pow(p[0],9) * std::pow(p[1],8);
+    // return std::pow(p[0],9) * std::pow(p[1],8);
   }
 
   template <int dim>
@@ -184,7 +225,7 @@ namespace Step99
 
     void assemble_system();
 
-    void solve(const double evaluating_time, const Vector<double> previous_solution, Vector<double> &solution_out);
+    void solve(const double evaluating_time, const LinearAlgebra::distributed::Vector<double> previous_solution, LinearAlgebra::distributed::Vector<double> &solution_out);
 
     void output_results() const;
 
@@ -200,40 +241,45 @@ namespace Step99
     RightHandSide<dim>      rhs_function;
     BoundaryValues<dim>   boundary_condition;
     InitialCondition<dim> initial_condition;
+    Diffusion<dim> diffusion;
 
-    Triangulation<dim> triangulation;
+    parallel::distributed::Triangulation<dim> triangulation;
 
     // We need two separate DoFHandlers. The first manages the DoFs for the
     // discrete level set function that describes the geometry of the domain.
     const FE_Q<dim> fe_level_set;
     DoFHandler<dim> level_set_dof_handler;
-    Vector<double>  level_set;
+    LinearAlgebra::distributed::Vector<double>  level_set;
 
     // The second DoFHandler manages the DoFs for the solution of the Poisson
     // equation.
     hp::FECollection<dim> fe_collection;
     DoFHandler<dim>       dof_handler;
-    Vector<double> solution;          // u^n
-    Vector<double> old_solution;      // u^{n-1}
+    LinearAlgebra::distributed::Vector<double> solution;          // u^n
+    LinearAlgebra::distributed::Vector<double> old_solution;      // u^{n-1}
 
     NonMatching::MeshClassifier<dim> mesh_classifier;
 
-    SparsityPattern      sparsity_pattern;
-    SparseMatrix<double> mass_matrix;
-    SparseMatrix<double> stiffness_matrix;
-    SparseMatrix<double> system_matrix;
-    Vector<double>       rhs;
+    // SparsityPattern      sparsity_pattern;
+    TrilinosWrappers::SparseMatrix mass_matrix;
+    TrilinosWrappers::SparseMatrix stiffness_matrix;
+    TrilinosWrappers::SparseMatrix system_matrix;
+
+    TrilinosWrappers::PreconditionILU precondition_ilu;
+    TrilinosWrappers::PreconditionAMG precondition_amg;
+
+    TrilinosWrappers::SolverDirect solver_direct;
+
+    LinearAlgebra::distributed::Vector<double>       rhs;
 
     double       time;
     double       time_step;
     double       final_time;
     unsigned int timestep_number;
-    
-    // Theta parameter for time discretization
-    // theta = 0: Forward Euler (explicit)
-    // theta = 0.5: Crank-Nicolson
-    // theta = 1: Backward Euler (implicit, most stable)
+
     const double theta;
+
+    const std::string lin_solver_type;
   };
 
 
@@ -242,14 +288,16 @@ namespace Step99
   HeatSolver<dim>::HeatSolver()
     : fe_degree(1)
     , fe_level_set(fe_degree)
+    , triangulation(MPI_COMM_WORLD)
     , level_set_dof_handler(triangulation)
     , dof_handler(triangulation)
     , mesh_classifier(level_set_dof_handler, level_set)
     , time(0.0)           
     , time_step(0.005)     
-    , final_time(.25)     
+    , final_time(0.25)     
     , timestep_number(0)
     , theta(0.0)
+    , lin_solver_type("direct")
   {}
 
 
@@ -280,15 +328,19 @@ namespace Step99
   template <int dim>
   void HeatSolver<dim>::setup_discrete_level_set()
   {
-    std::cout << "Setting up discrete level set function" << std::endl;
-
     level_set_dof_handler.distribute_dofs(fe_level_set);
-    level_set.reinit(level_set_dof_handler.n_dofs());
+
+    const auto partitioner = std::make_shared<const Utilities::MPI::Partitioner>(
+      level_set_dof_handler.locally_owned_dofs(),
+      DoFTools::extract_locally_relevant_dofs(level_set_dof_handler),
+      level_set_dof_handler.get_communicator());
+    level_set.reinit(partitioner);
 
     const Functions::SignedDistance::Sphere<dim> signed_distance_sphere;
     VectorTools::interpolate(level_set_dof_handler,
                              signed_distance_sphere,
                              level_set);
+    level_set.update_ghost_values();
   }
 
 
@@ -309,8 +361,6 @@ namespace Step99
   template <int dim>
   void HeatSolver<dim>::distribute_dofs()
   {
-    std::cout << "Distributing degrees of freedom" << std::endl;
-
     fe_collection.push_back(FE_Q<dim>(fe_degree));
     fe_collection.push_back(FE_Nothing<dim>());
 
@@ -331,14 +381,14 @@ namespace Step99
   template <int dim>
   void HeatSolver<dim>::initialize_matrices()
   {
-    std::cout << "Initializing matrices" << std::endl;
-
     const auto face_has_flux_coupling = [&](const auto        &cell,
                                             const unsigned int face_index) {
       return this->face_has_ghost_penalty(cell, face_index);
     };
 
-    DynamicSparsityPattern dsp(dof_handler.n_dofs(), dof_handler.n_dofs());
+    TrilinosWrappers::SparsityPattern sparsity_pattern;
+    sparsity_pattern.reinit(dof_handler.locally_owned_dofs(),
+                            dof_handler.get_communicator());
 
     const unsigned int           n_components = fe_collection.n_components();
     Table<2, DoFTools::Coupling> cell_coupling(n_components, n_components);
@@ -350,21 +400,26 @@ namespace Step99
     const bool                      keep_constrained_dofs = true;
 
     DoFTools::make_flux_sparsity_pattern(dof_handler,
-                                         dsp,
+                                         sparsity_pattern,
                                          constraints,
                                          keep_constrained_dofs,
                                          cell_coupling,
                                          face_coupling,
                                          numbers::invalid_subdomain_id,
                                          face_has_flux_coupling);
-    sparsity_pattern.copy_from(dsp);
+    sparsity_pattern.compress();
 
     mass_matrix.reinit(sparsity_pattern);
     stiffness_matrix.reinit(sparsity_pattern);
-    system_matrix.reinit(sparsity_pattern);    
-    solution.reinit(dof_handler.n_dofs());
-    old_solution.reinit(dof_handler.n_dofs());
-    rhs.reinit(dof_handler.n_dofs());
+    system_matrix.reinit(sparsity_pattern);  
+
+    const auto partitioner = std::make_shared<const Utilities::MPI::Partitioner>(
+      dof_handler.locally_owned_dofs(),
+      DoFTools::extract_locally_active_dofs(dof_handler),
+      dof_handler.get_communicator());
+    solution.reinit(partitioner);
+    old_solution.reinit(solution);
+    rhs.reinit(solution);
   }
 
 
@@ -403,8 +458,6 @@ namespace Step99
   template <int dim>
   void HeatSolver<dim>::assemble_system()
   {
-    std::cout << "Assembling" << std::endl;
-
     const unsigned int n_dofs_per_cell = fe_collection[0].dofs_per_cell;
     FullMatrix<double> local_mass(n_dofs_per_cell, n_dofs_per_cell);
     FullMatrix<double> local_stiffness(n_dofs_per_cell, n_dofs_per_cell);
@@ -424,15 +477,17 @@ namespace Step99
     FEInterfaceValues<dim> fe_interface_values(fe_collection[0],
                                                face_quadrature,
                                                update_gradients |
+                                               update_hessians |
                                                  update_JxW_values |
-                                                 update_normal_vectors);
+                                                 update_normal_vectors |
+                                                update_quadrature_points);
 
     const QGauss<1> quadrature_1D(fe_degree + 1);
 
     NonMatching::RegionUpdateFlags region_update_flags;
-    region_update_flags.inside = update_values | update_gradients |
+    region_update_flags.inside = update_values | update_gradients | update_hessians |
                                  update_JxW_values | update_quadrature_points;
-    region_update_flags.surface = update_values | update_gradients |
+    region_update_flags.surface = update_values | update_gradients | update_hessians |
                                   update_JxW_values | update_quadrature_points |
                                   update_normal_vectors;
 
@@ -448,6 +503,7 @@ namespace Step99
     // filter.
     for (const auto &cell :
          dof_handler.active_cell_iterators() |
+           IteratorFilters::LocallyOwnedCell() |
            IteratorFilters::ActiveFEIndexEqualTo(ActiveFEIndex::lagrange))
       {
         local_mass = 0;
@@ -464,24 +520,22 @@ namespace Step99
           for (const unsigned int q :
                inside_fe_values->quadrature_point_indices())
             {
-              // const Point<dim> &point = inside_fe_values->quadrature_point(q);
+              const Point<dim> point= inside_fe_values->quadrature_point(q);
+                  double c_inside= diffusion.value(point);
               for (const unsigned int i : inside_fe_values->dof_indices())
                 {
                   for (const unsigned int j : inside_fe_values->dof_indices())
                     {
+                      local_stiffness(i, j) +=    
+                      c_inside *
+                      inside_fe_values->shape_grad(i, q) *
+                          inside_fe_values->shape_grad(j, q) *
+                          inside_fe_values->JxW(q);
                       local_mass(i, j) +=
                         inside_fe_values->shape_value(i, q) *
                         inside_fe_values->shape_value(j, q) *
                         inside_fe_values->JxW(q);
-
-                      local_stiffness(i, j) +=
-                        inside_fe_values->shape_grad(i, q) *
-                        inside_fe_values->shape_grad(j, q) *
-                        inside_fe_values->JxW(q);
                     }
-                  // local_rhs(i) += rhs_function.value(point) *
-                  //                   inside_fe_values->shape_value(i, q) *
-                  //                   inside_fe_values->JxW(q);
                 }
             }
 
@@ -493,8 +547,8 @@ namespace Step99
             for (const unsigned int q :
                  surface_fe_values->quadrature_point_indices())
               {
-                // const Point<dim> &point =
-                //   surface_fe_values->quadrature_point(q);
+                const Point<dim> point= surface_fe_values->quadrature_point(q);
+                  double c_surface= diffusion.value(point);
                 const Tensor<1, dim> &normal =
                   surface_fe_values->normal_vector(q);
                 for (const unsigned int i : surface_fe_values->dof_indices())
@@ -503,21 +557,15 @@ namespace Step99
                          surface_fe_values->dof_indices())
                       {
                         local_stiffness(i, j) +=
-                          (-normal * surface_fe_values->shape_grad(i, q) *
-                             surface_fe_values->shape_value(j, q) +
-                           -normal * surface_fe_values->shape_grad(j, q) *
-                             surface_fe_values->shape_value(i, q) +
-                           nitsche_parameter / cell_side_length *
-                             surface_fe_values->shape_value(i, q) *
-                             surface_fe_values->shape_value(j, q)) *
-                          surface_fe_values->JxW(q);
+                            (-normal * surface_fe_values->shape_grad(i, q) *
+                              surface_fe_values->shape_value(j, q) +
+                            -normal * surface_fe_values->shape_grad(j, q) *
+                              surface_fe_values->shape_value(i, q) +
+                            nitsche_parameter / cell_side_length *
+                              surface_fe_values->shape_value(i, q) *
+                              surface_fe_values->shape_value(j, q)) *
+                            surface_fe_values->JxW(q) * c_surface;
                       }
-                    // local_rhs(i) +=
-                    //   boundary_condition.value(point) *
-                    //   (nitsche_parameter / cell_side_length *
-                    //      surface_fe_values->shape_value(i, q) -
-                    //    normal * surface_fe_values->shape_grad(i, q)) *
-                    //   surface_fe_values->JxW(q);
                   }
               }
           }
@@ -552,20 +600,34 @@ namespace Step99
                 {
                   const Tensor<1, dim> normal =
                     fe_interface_values.normal_vector(q);
+                  const Point<dim> point= fe_interface_values.quadrature_point(q);
+                  double c_interface= diffusion.value(point);
                   for (unsigned int i = 0; i < n_interface_dofs; ++i)
                     for (unsigned int j = 0; j < n_interface_dofs; ++j)
                       {
                         local_mass_stabilization(i, j) +=
-                          .5 * ghost_parameter_1 * (0.33) * std::pow(cell_side_length,3) * normal *
+                          .5 * ghost_parameter_1  * std::pow(cell_side_length,3) * normal *
                           fe_interface_values.jump_in_shape_gradients(i, q) *
                           normal *
                           fe_interface_values.jump_in_shape_gradients(j, q) *
-                          fe_interface_values.JxW(q);                        
+                          fe_interface_values.JxW(q);    
+                        local_mass_stabilization(i, j) +=
+                          .5 * ghost_parameter_1  * std::pow(cell_side_length,5) * normal *
+                          fe_interface_values.jump_in_shape_hessians(i, q) * normal *
+                          normal *
+                          fe_interface_values.jump_in_shape_hessians(j, q) * normal *
+                          fe_interface_values.JxW(q);                
                         local_stabilization(i, j) +=
-                          .5 * ghost_parameter_2 * (0.33) *  cell_side_length * normal *
+                          .5 * ghost_parameter_2 * c_interface * cell_side_length * normal *
                           fe_interface_values.jump_in_shape_gradients(i, q) *
                           normal *
                           fe_interface_values.jump_in_shape_gradients(j, q) *
+                          fe_interface_values.JxW(q);
+                        local_stabilization(i, j) +=
+                          .5 * ghost_parameter_2 * c_interface * std::pow(cell_side_length,3) * normal *
+                          fe_interface_values.jump_in_shape_hessians(i, q) * normal *
+                          normal *
+                          fe_interface_values.jump_in_shape_hessians(j, q) * normal *
                           fe_interface_values.JxW(q);
                       }
                 }
@@ -581,21 +643,32 @@ namespace Step99
             }
       }
 
+    mass_matrix.compress(VectorOperation::add);
+    stiffness_matrix.compress(VectorOperation::add);
+
     system_matrix.copy_from(mass_matrix);
+
+    if(lin_solver_type == "direct")
+      solver_direct.initialize(system_matrix);
+    else if(lin_solver_type == "ilu")
+      precondition_ilu.initialize(system_matrix);
+    else if(lin_solver_type == "amg")
+      precondition_amg.initialize(system_matrix);
     // system_matrix.add(theta * time_step, stiffness_matrix);
   }
 
 
   // @sect3{Solving the System}
   template <int dim>
-  void HeatSolver<dim>::solve(const double evaluating_time, const Vector<double> previous_solution, Vector<double> &solution_out)
+  void HeatSolver<dim>::solve(const double evaluating_time, const LinearAlgebra::distributed::Vector<double> previous_solution, LinearAlgebra::distributed::Vector<double> &solution_out)
   {
 
     rhs = 0;
 
     if (theta < 1.0)
       {
-        Vector<double> tmp(solution.size());
+        LinearAlgebra::distributed::Vector<double> tmp;
+        tmp.reinit(solution);
         stiffness_matrix.vmult(tmp, previous_solution);
         rhs.add(-1.0, tmp);
       }
@@ -607,7 +680,6 @@ namespace Step99
     const double nitsche_parameter = 5 * (fe_degree) * fe_degree;
 
     const QGauss<1> quadrature_1D(fe_degree + 1);
-
     NonMatching::RegionUpdateFlags region_update_flags;
     region_update_flags.inside = update_values | update_JxW_values | 
                                  update_quadrature_points;
@@ -624,7 +696,9 @@ namespace Step99
 
     for (const auto &cell :
          dof_handler.active_cell_iterators() |
+           IteratorFilters::LocallyOwnedCell() |
            IteratorFilters::ActiveFEIndexEqualTo(ActiveFEIndex::lagrange))
+      if(cell->is_locally_owned())
       {
         local_rhs = 0;
         const double cell_side_length = cell->minimum_vertex_distance();
@@ -670,6 +744,7 @@ namespace Step99
               {
                 const Point<dim> &point =
                   surface_fe_values->quadrature_point(q);
+                  double c_surface= diffusion.value(point);
                 const Tensor<1, dim> &normal =
                   surface_fe_values->normal_vector(q);
 
@@ -680,7 +755,7 @@ namespace Step99
                 for (const unsigned int i : surface_fe_values->dof_indices())
                   {
                     local_rhs(i) +=
-                      g_value *
+                      g_value * c_surface *
                       (nitsche_parameter / cell_side_length *
                          surface_fe_values->shape_value(i, q) -
                        normal * surface_fe_values->shape_grad(i, q)) *
@@ -693,12 +768,25 @@ namespace Step99
         rhs.add(local_dof_indices, local_rhs);
       }
 
-    std::cout << "Solving system" << std::endl;
+    rhs.compress(VectorOperation::add);
 
-    const unsigned int max_iterations = solution.size();
-    ReductionControl      solver_control(max_iterations,1e-20,1e-10);
-    SolverCG<>         solver(solver_control);
-    solver.solve(system_matrix, solution_out, rhs, PreconditionIdentity());
+    if(lin_solver_type == "direct")
+      {
+        solver_direct.solve(solution_out, rhs);
+      }
+    else
+      {
+        const unsigned int max_iterations = 100 * solution.size();
+        ReductionControl      solver_control(max_iterations,1e-20,1e-10);
+        SolverCG<LinearAlgebra::distributed::Vector<double>>         solver(solver_control);
+
+        if(lin_solver_type == "identity")
+          solver.solve(system_matrix, solution_out, rhs, PreconditionIdentity());
+        else if(lin_solver_type == "ilu")
+          solver.solve(system_matrix, solution_out, rhs, precondition_ilu);
+        else if(lin_solver_type == "amg")
+          solver.solve(system_matrix, solution_out, rhs, precondition_amg);
+      }
   }
 
 
@@ -718,7 +806,7 @@ namespace Step99
     data_out.add_data_vector(dof_handler, solution, "solution");
     data_out.add_data_vector(level_set_dof_handler, level_set, "level_set");
 
-    Vector<double> analytical_solution;
+    LinearAlgebra::distributed::Vector<double> analytical_solution;
     analytical_solution.reinit(solution);
 
     AnalyticalSolution<dim> analytical_solution_fu;
@@ -732,7 +820,9 @@ namespace Step99
 
     data_out.set_cell_selection(
       [this](const typename Triangulation<dim>::cell_iterator &cell) {
-        return cell->is_active() &&
+        return cell->is_active() && cell->is_locally_owned() &&
+               mesh_classifier.location_to_level_set(cell) !=
+                 NonMatching::LocationToLevelSet::outside;
                mesh_classifier.location_to_level_set(cell) !=
                  NonMatching::LocationToLevelSet::outside;
       });
@@ -745,7 +835,7 @@ namespace Step99
   template <int dim>
   double HeatSolver<dim>::compute_L2_error() const
   {
-    std::cout << "Computing L2 error" << std::endl;
+    // std::cout << "Computing L2 error" << std::endl;
 
     const QGauss<1> quadrature_1D(fe_degree + 1);
 
@@ -769,6 +859,7 @@ namespace Step99
 
     for (const auto &cell :
          dof_handler.active_cell_iterators() |
+           IteratorFilters::LocallyOwnedCell() |
            IteratorFilters::ActiveFEIndexEqualTo(ActiveFEIndex::lagrange))
       {
         non_matching_fe_values.reinit(cell);
@@ -792,6 +883,10 @@ namespace Step99
           }
       }
 
+    solution.zero_out_ghost_values();
+
+    error_L2_squared = Utilities::MPI::sum(error_L2_squared, dof_handler.get_communicator());
+
     return std::sqrt(error_L2_squared);
   }
 
@@ -806,7 +901,7 @@ namespace Step99
   void HeatSolver<dim>::run()
   {
     ConvergenceTable   convergence_table;
-    const unsigned int n_refinements = 3;
+    const unsigned int n_refinements = 6;
 
     make_grid();
     // std::vector<double> prev_error;
@@ -820,9 +915,8 @@ namespace Step99
         timestep_number = 0;
         const double cell_side_length =
           triangulation.begin_active()->minimum_vertex_distance();
-        time_step = (0.05)*std::pow(cell_side_length,2);
+        time_step = (0.1)*std::pow(cell_side_length,2);
         setup_discrete_level_set();
-        std::cout << "Classifying cells" << std::endl;
         mesh_classifier.reclassify();
         distribute_dofs();
         initialize_matrices();
@@ -835,11 +929,17 @@ namespace Step99
         
         while(time<final_time-1e-6)
         {
-          Vector<double> sol_k1(dof_handler.n_dofs());
-          Vector<double> sol_k2(dof_handler.n_dofs());
-          Vector<double> sol_k3(dof_handler.n_dofs());
-          Vector<double> sol_k4(dof_handler.n_dofs());
-          Vector<double> tmp(dof_handler.n_dofs());
+          LinearAlgebra::distributed::Vector<double> sol_k1;
+          LinearAlgebra::distributed::Vector<double> sol_k2;
+          LinearAlgebra::distributed::Vector<double> sol_k3;
+          LinearAlgebra::distributed::Vector<double> sol_k4;
+          LinearAlgebra::distributed::Vector<double> tmp;
+
+          sol_k1.reinit(old_solution);
+          sol_k2.reinit(old_solution);
+          sol_k3.reinit(old_solution);
+          sol_k4.reinit(old_solution);
+          tmp.reinit(old_solution);
 
           // k1
           solve(time, old_solution, sol_k1);
@@ -869,7 +969,6 @@ namespace Step99
           error_L2 = compute_L2_error();
           time += time_step;
           timestep_number += 1;
-          std::cout<<time<<"    "<<timestep_number<<std::endl;
           old_solution = solution;
         }
 
@@ -897,9 +996,13 @@ namespace Step99
         prev_error = error_L2;
         prev_h = cell_side_length;
 
-        std::cout << std::endl;
+        for (const std::string &col : {"Mesh size", "Time Step", "L2-Error", "Rate"})
+          convergence_table.set_precision(col, 8);
+        if(Utilities::MPI::this_mpi_process(dof_handler.get_communicator())== 0)
+        {
         convergence_table.write_text(std::cout);
         std::cout << std::endl;
+        }
 
         
 
@@ -911,8 +1014,9 @@ namespace Step99
 
 
 // @sect3{The main() function}
-int main()
+int main(int argc, char *argv[])
 {
+  dealii::Utilities::MPI::MPI_InitFinalize mpi_initialization(argc, argv, 1);
   const int dim = 2;
 
   Step99::HeatSolver<dim> heat_solver;
