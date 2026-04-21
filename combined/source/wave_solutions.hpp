@@ -749,6 +749,150 @@ public:
     }
 };
 
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════════════
+//  SOLUTION 5: Interface Problem with constant but different speed both sides from SIAM Journal of Sci. Comp.
+// ═══════════════════════════════════════════════════════════════════════════════════════════════════════════
+
+template <int dim>
+class Speed6 : public Function<dim>
+{
+public:
+    double value(const Point<dim> &p,
+                 const unsigned int component = 0) const override
+    {
+        (void)component;
+        return 1.0;
+    }
+};
+
+template <int dim>
+class SpeedOther6 : public Function<dim>
+{
+public:
+    double value(const Point<dim> &p,
+                 const unsigned int component = 0) const override
+    {
+        (void)component;
+        return 0.25;
+    }
+};
+
+template <int dim>
+class AnalyticalSolution6 : public Function<dim>
+{
+public:
+    double value(const Point<dim> &p,
+                 const unsigned int component = 0) const override
+      {
+        const double t = this->get_time();
+        const double k_1 = std::sqrt(7);
+        const double k_2 = (1-(0.25)*std::sqrt(7))/(1+(0.25)*std::sqrt(7));
+        if(p[0]<=0)
+        {
+            return std::cos(p[0]+p[1]-std::sqrt(2)*1*t) + k_2 * std::cos(p[0]-p[1]+std::sqrt(2)*1*t);
+        }
+        else
+        {
+            return (1+k_2) * std::cos(k_1 * p[0] + p[1] -std::sqrt(2) * 1 * t);
+        }
+      }
+};
+
+template <int dim>
+class RHSFunction6 : public Function<dim>
+{
+public:
+    double value(const Point<dim> &p, const unsigned int = 0) const override
+      {
+        // const double t = this->get_time();
+        return 0.0;
+      }
+};
+
+template <int dim>
+class InterfaceBoundaryCondition6 : public Function<dim>
+{
+public:
+    double value(const Point<dim> &p,
+                 const unsigned int component = 0) const override
+      {
+        const double t = this->get_time();
+        const double k_1 = std::sqrt(7);
+        const double k_2 = (1-(0.25)*std::sqrt(7))/(1+(0.25)*std::sqrt(7));
+        if(p[0]<=0)
+        {
+            return std::cos(p[0]+p[1]-std::sqrt(2)*1*t) + k_2 * std::cos(p[0]-p[1]+std::sqrt(2)*1*t);
+        }
+        else
+        {
+            return (1+k_2) * std::cos(k_1 * p[0] + p[1] -std::sqrt(2) * 1 * t);
+        }
+      }
+};
+
+template <int dim>
+class OuterBoundaryCondition6 : public Function<dim>
+{
+public:
+    double value(const Point<dim> &p,
+                 const unsigned int component = 0) const override
+      {
+        const double t = this->get_time();
+        const double k_1 = std::sqrt(7);
+        const double k_2 = (1-(0.25)*std::sqrt(7))/(1+(0.25)*std::sqrt(7));
+        if(p[0]<=0)
+        {
+            return std::cos(p[0]+p[1]-std::sqrt(2)*1*t) + k_2 * std::cos(p[0]-p[1]+std::sqrt(2)*1*t);
+        }
+        else
+        {
+            return (1+k_2) * std::cos(k_1 * p[0] + p[1] -std::sqrt(2) * 1 * t);
+        }
+      }
+};
+
+template <int dim>
+class InitialData6 : public Function<dim>
+{
+public:
+    double value(const Point<dim> &p,
+                 const unsigned int component = 0) const override
+      {
+        // const double t = this->get_time();
+        const double k_1 = std::sqrt(7);
+        const double k_2 = (1-(0.25)*std::sqrt(7))/(1+(0.25)*std::sqrt(7));
+        if(p[0]<=0)
+        {
+            return std::cos(p[0]+p[1]) + k_2 * std::cos(p[0]-p[1]);
+        }
+        else
+        {
+            return (1+k_2) * std::cos(k_1 * p[0] + p[1]);
+        }
+      }
+};
+
+template <int dim>
+class DerivativeInitialData6 : public Function<dim>
+{
+public:
+    double value(const Point<dim> &p,
+                 const unsigned int component = 0) const override
+    {
+        (void)component;
+        const double k_1 = std::sqrt(7);
+        const double k_2 = (1-(0.25)*std::sqrt(7))/(1+(0.25)*std::sqrt(7));
+        if(p[0]<=0)
+        {
+            return std::sqrt(2) * 1 * std::sin(p[0]+p[1]) - std::sqrt(2) * 1 * k_2 * std::sin(p[0]-p[1]);
+        }
+        else
+        {
+            return std::sqrt(2) * 1 * (1+k_2) * std::sin(k_1 * p[0] + p[1]);
+        }
+    }
+};
+
 
 // ═══════════════════════════════════════════════════════
 //  FACTORY — one call returns all functions for a choice
@@ -844,6 +988,20 @@ SolutionSet<dim> make_solution(const int choice)
             s.final_time                   = 2.0 * M_PI ;
             s.speed                        = std::make_unique<Speed5<dim>>();
             s.speed_other                  = std::make_unique<SpeedOther5<dim>>();
+            break;
+        case 6:
+            s.analytical_solution          = std::make_unique<AnalyticalSolution6<dim>>();
+            s.level_set_function           = std::make_unique<StraightLineInterface<dim>>();
+            s.rhs_function                 = std::make_unique<RHSFunction6<dim>>();
+            s.interface_boundary_condition = std::make_unique<InterfaceBoundaryCondition6<dim>>();
+            s.outer_boundary_condition     = std::make_unique<OuterBoundaryCondition6<dim>>();
+            s.initial_data                 = std::make_unique<InitialData6<dim>>();
+            s.derivative_initial_data      = std::make_unique<DerivativeInitialData6<dim>>();
+            s.initial_time                 = 0.0;
+            s.final_time                   = 2.0;
+            // s.final_time                   = 2.0 * M_PI / std::sqrt(2.0);
+            s.speed                        = std::make_unique<Speed6<dim>>();
+            s.speed_other                  = std::make_unique<SpeedOther6<dim>>();
             break;
         default:
             AssertThrow(false, ExcMessage("Unknown solution choice: "

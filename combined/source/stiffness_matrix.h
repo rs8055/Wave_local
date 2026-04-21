@@ -144,8 +144,8 @@ public:
                   const Point<dim> point= surface_fe_values.quadrature_point(q);
                       double c_surface= speed->value(point);
                       double c_surface_other= speed_other->value(point);
-                      double k1 = c_surface_other/(c_surface + c_surface_other);
-                      double k2 = c_surface/(c_surface + c_surface_other);
+                      double k_1 = c_surface_other/(c_surface + c_surface_other);
+                      double k_2 = c_surface/(c_surface + c_surface_other);
                   const Tensor<1, dim> normal =
                     surface_fe_values.normal_vector(q);
 
@@ -159,10 +159,10 @@ public:
                       const auto quadrature_gradient_avg =
                         // 0.5 *
                         // (c_surface * quadrature_gradients_0[q] + c_surface_other * quadrature_gradients_1[q]);
-                        (k1 * c_surface * quadrature_gradients_0[q] + k2 * c_surface_other * quadrature_gradients_1[q]);
+                        (k_1 * c_surface * quadrature_gradients_0[q] + k_2 * c_surface_other * quadrature_gradients_1[q]);
 
                       cell_vector_0(i) -=
-                        (-k1 * c_surface * normal * surface_fe_values.shape_grad(i, q) *
+                        (-k_1 * c_surface * normal * surface_fe_values.shape_grad(i, q) *
                            quadrature_value_jump -
                          surface_fe_values.shape_value(i, q) * normal *
                            quadrature_gradient_avg +
@@ -172,7 +172,7 @@ public:
                         surface_fe_values.JxW(q);
 
                       cell_vector_1(i) -=
-                        (-k2 * c_surface_other * normal * surface_fe_values.shape_grad(i, q) *
+                        (-k_2 * c_surface_other * normal * surface_fe_values.shape_grad(i, q) *
                            quadrature_value_jump +
                          surface_fe_values.shape_value(i, q) * normal *
                            quadrature_gradient_avg -

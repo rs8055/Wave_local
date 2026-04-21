@@ -56,6 +56,10 @@ public:
   ): tria(MPI_COMM_WORLD)
     , level_set_dof_handler(tria)
     , dof_handler(tria)
+    , fe_degree(fe_degree)
+    , n_subdivisions_1D(n_subdivisions_1D)
+    , geometry_left(geometry_left)
+    , geometry_right(geometry_right)
     , level_set_function(lsf)
     , cavity(cavity_in)
     , composite(composite_in)
@@ -66,7 +70,14 @@ public:
                                          n_subdivisions_1D,
                                          geometry_left,
                                          geometry_right);
-    dx = (geometry_right - geometry_left) / n_subdivisions_1D;
+    // dx = (geometry_right - geometry_left) / n_subdivisions_1D;
+
+    // // Uniform refinement for the rectangle
+    // GridGenerator::subdivided_hyper_rectangle(tria,
+    //                                           {n_subdivisions_1D, (0.5) * n_subdivisions_1D},   
+    //                                           Point<2>(-10, 0),                            
+    //                                           Point<2>(10, 10));                                        
+    // dx = (20) / n_subdivisions_1D;
 
 
 
@@ -106,10 +117,12 @@ public:
 
     fe_collection.push_back(FE_Q<dim>(fe_degree));
     fe_collection.push_back(FE_Nothing<dim>());
+    dx = 1;
 
     for (const auto &cell : dof_handler.active_cell_iterators() |
            IteratorFilters::LocallyOwnedCell())
       {        
+        dx = cell->minimum_vertex_distance()<dx ? cell->minimum_vertex_distance() : dx;
         if(composite)
         {
           cell->set_active_fe_index(ActiveFEIndex::lagrange);
@@ -179,6 +192,10 @@ private:
   parallel::distributed::Triangulation<dim>          tria;
   DoFHandler<dim>                                    level_set_dof_handler;
   DoFHandler<dim>                                    dof_handler;
+  const unsigned int                                 fe_degree;
+  unsigned int                                       n_subdivisions_1D;
+  const double                                       geometry_left;
+  const double                                       geometry_right;
   const Function<dim>                                *level_set_function;
   bool                                               cavity;
   bool                                               composite;

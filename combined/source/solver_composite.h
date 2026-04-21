@@ -111,6 +111,7 @@ private:
   {
     BlockVectorType rhs = make_block_vector();
 
+    // Stiffness operator fills both blocks (coupling lives here)
     stiffness.get_rhs_matrix(rhs, t, previous_u);
 
     // Solve each block independently with its own system matrix

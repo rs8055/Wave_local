@@ -8,6 +8,7 @@
 #include "solver.h"
 #include "solver_composite.h"
 #include "l2_error.h"
+#include "output.h"
 
 using namespace dealii;
 
@@ -94,6 +95,8 @@ int main(int argc, char* argv[])
                                              cavity,
                                              composite);
 
+    Output<2> output(discretization, sol.analytical_solution.get());                                         
+
     TrilinosWrappers::SparseMatrix system_matrix;
     TrilinosWrappers::SparseMatrix system_matrix_other;
     if (pde == 0)
@@ -140,14 +143,16 @@ int main(int argc, char* argv[])
                               NonMatching::LocationToLevelSet::inside);
       const double error_L2_inside = l2_error_inside.get_l2_error(solver_composite.get_final_time());
       std::cout << "L2 error Inside: " << error_L2_inside<< std::endl;
+      output.output_result(solution.block(0), NonMatching::LocationToLevelSet::inside, solver_composite.get_final_time(), "solution_inside");
       L2ErrorOperator<2> l2_error_outside(discretization,
                               solver_composite.get_analytical_solution(),
                               solution.block(1),
                               NonMatching::LocationToLevelSet::outside);
       const double error_L2_outside = l2_error_outside.get_l2_error(solver_composite.get_final_time());
       std::cout << "L2 error Outside: " << error_L2_outside<< std::endl;
-      double error_L2 = error_L2_inside + error_L2_outside;
+      double error_L2 = std::sqrt(std::pow(error_L2_inside,2) + std::pow(error_L2_outside,2));
       std::cout << "L2 error: " << error_L2<< std::endl;
+      output.output_result(solution.block(0), NonMatching::LocationToLevelSet::outside, solver_composite.get_final_time(), "solution_outside");
     }
     else
     {
@@ -170,6 +175,7 @@ int main(int argc, char* argv[])
                               location);
       const double error_L2 = l2_error.get_l2_error(solver.get_final_time());
       std::cout << "L2 error: " << error_L2<< std::endl;
+      output.output_result(solution, location, solver.get_final_time(),  "solution");
     }
     
   };
