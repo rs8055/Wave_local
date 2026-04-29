@@ -25,6 +25,7 @@ public:
   {}
 
     double get_l2_error(const double final_time) const {
+      solution.update_ghost_values();
     
     const NonMatching::LocationToLevelSet inverse_location =
       (location == NonMatching::LocationToLevelSet::inside) ?

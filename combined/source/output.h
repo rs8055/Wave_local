@@ -43,12 +43,18 @@ public:
     data_out.add_data_vector(level_set_dof_handler, level_set, "level_set");
 
     LinearAlgebra::distributed::Vector<double> as_vector;
+    LinearAlgebra::distributed::Vector<double> error_vector;
     as_vector.reinit(solution_vector);
     analytical_solution->set_time(final_time);
 
     VectorTools::interpolate(dof_handler,
                              *analytical_solution,
                              as_vector);
+
+    error_vector.reinit(solution_vector);
+    error_vector = as_vector;
+    error_vector -= solution_vector;
+    data_out.add_data_vector(dof_handler, error_vector, "error_" + name);                         
 
     data_out.add_data_vector(dof_handler, as_vector, "analytical");
 

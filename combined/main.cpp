@@ -152,7 +152,7 @@ int main(int argc, char* argv[])
       std::cout << "L2 error Outside: " << error_L2_outside<< std::endl;
       double error_L2 = std::sqrt(std::pow(error_L2_inside,2) + std::pow(error_L2_outside,2));
       std::cout << "L2 error: " << error_L2<< std::endl;
-      output.output_result(solution.block(0), NonMatching::LocationToLevelSet::outside, solver_composite.get_final_time(), "solution_outside");
+      output.output_result(solution.block(1), NonMatching::LocationToLevelSet::outside, solver_composite.get_final_time(), "solution_outside");
     }
     else
     {

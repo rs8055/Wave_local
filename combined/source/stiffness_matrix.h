@@ -526,25 +526,25 @@ private:
 
         const auto face_has_ghost_penalty = [&](const auto        &cell,
                                             const unsigned int face_index) {
-      if (cell->at_boundary(face_index))
+        if (cell->at_boundary(face_index))
+          return false;
+
+        const NonMatching::LocationToLevelSet cell_location =
+          mesh_classifier.location_to_level_set(cell);
+
+        const NonMatching::LocationToLevelSet neighbor_location =
+          mesh_classifier.location_to_level_set(cell->neighbor(face_index));
+
+        if (cell_location == NonMatching::LocationToLevelSet::intersected &&
+            neighbor_location != inverse_location)
+          return true;
+
+        if (neighbor_location == NonMatching::LocationToLevelSet::intersected &&
+            cell_location != inverse_location)
+          return true;
+
         return false;
-
-      const NonMatching::LocationToLevelSet cell_location =
-        mesh_classifier.location_to_level_set(cell);
-
-      const NonMatching::LocationToLevelSet neighbor_location =
-        mesh_classifier.location_to_level_set(cell->neighbor(face_index));
-
-      if (cell_location == NonMatching::LocationToLevelSet::intersected &&
-          neighbor_location != inverse_location)
-        return true;
-
-      if (neighbor_location == NonMatching::LocationToLevelSet::intersected &&
-          cell_location != inverse_location)
-        return true;
-
-      return false;
-    };
+      };
     discretization.initialize_dof_vector(vec_rhs); 
     const unsigned int n_dofs_per_cell = fe_collection[0].dofs_per_cell;
     Vector<double> local_rhs(n_dofs_per_cell);

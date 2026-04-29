@@ -57,7 +57,7 @@ public:
   double value(const Point<dim> &p,
                const unsigned int = 0) const override
   {
-    return p[0] + p[1]; // zero level set is x+y=0
+    return p[0] + p[1] - 1e-8; // zero level set is x+y=0
   }
 };
 
@@ -1076,7 +1076,7 @@ public:
                  const unsigned int component = 0) const override
       {
         const double t = this->get_time();
-        const double k_1 = std::sqrt(7.0/2.0);
+        // const double k_1 = std::sqrt(7.0/2.0);
         const double k_2 = (1-(0.25)*std::sqrt(7))/(1+(0.25)*std::sqrt(7));
         if(p[0]+p[1]<0)
         {
@@ -1108,7 +1108,7 @@ public:
                  const unsigned int component = 0) const override
       {
         const double t = this->get_time();
-        const double k_1 = std::sqrt(7.0/2.0);
+        // const double k_1 = std::sqrt(7.0/2.0);
         const double k_2 = (1-(0.25)*std::sqrt(7))/(1+(0.25)*std::sqrt(7));
         if(p[0]+p[1]<0)
         {
@@ -1129,7 +1129,7 @@ public:
                  const unsigned int component = 0) const override
       {
         const double t = this->get_time();
-        const double k_1 = std::sqrt(7.0/2.0);
+        // const double k_1 = std::sqrt(7.0/2.0);
         const double k_2 = (1-(0.25)*std::sqrt(7))/(1+(0.25)*std::sqrt(7));
         if(p[0]+p[1]<0)
         {
@@ -1150,7 +1150,7 @@ public:
                  const unsigned int component = 0) const override
       {
         // const double t = this->get_time();
-        const double k_1 = std::sqrt(7.0/2.0);
+        // const double k_1 = std::sqrt(7.0/2.0);
         const double k_2 = (1-(0.25)*std::sqrt(7))/(1+(0.25)*std::sqrt(7));
         if(p[0]+p[1]<0)
         {
@@ -1171,7 +1171,7 @@ public:
                  const unsigned int component = 0) const override
     {
         (void)component;
-        const double k_1 = std::sqrt(7.0/2.0);
+        // const double k_1 = std::sqrt(7.0/2.0);
         const double k_2 = (1-(0.25)*std::sqrt(7))/(1+(0.25)*std::sqrt(7));
         if(p[0]+p[1]<0)
         {
@@ -1197,6 +1197,7 @@ SolutionSet<dim> make_solution(const int choice)
     {
         case 0:
             s.analytical_solution          = std::make_unique<AnalyticalSolution0<dim>>();
+            s.level_set_function           = std::make_unique<AlignedInterface<dim>>();
             s.interface_gradient_function  = std::make_unique<InterfaceGradientSolution0<dim>>();
             s.rhs_function                 = std::make_unique<RHSFunction0<dim>>();
             s.interface_boundary_condition = std::make_unique<InterfaceBoundaryCondition0<dim>>();
