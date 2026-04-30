@@ -151,7 +151,7 @@ int main(int argc, char* argv[])
       const double error_L2_outside = l2_error_outside.get_l2_error(solver_composite.get_final_time());
       std::cout << "L2 error Outside: " << error_L2_outside<< std::endl;
       double error_L2 = std::sqrt(std::pow(error_L2_inside,2) + std::pow(error_L2_outside,2));
-      std::cout << "L2 error: " << error_L2<< std::endl;
+      std::cout << "L2 error: " << error_L2 << std::endl;
       output.output_result(solution.block(1), NonMatching::LocationToLevelSet::outside, solver_composite.get_final_time(), "solution_outside");
     }
     else
@@ -163,7 +163,8 @@ int main(int argc, char* argv[])
                                       stiffness_matrix,
                                       system_matrix,
                                       pde,
-                                      cfl);
+                                      cfl,
+                                      location);
       solver.solve();
       solution = solver.get_solution();                              
       solution.update_ghost_values();

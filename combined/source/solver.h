@@ -43,12 +43,14 @@ public:
          StiffnessMatrixOperator<dim>   &stiffness,
          TrilinosWrappers::SparseMatrix &system_matrix,
          const int                       pde_type,
-         const double                    cfl)
+         const double                    cfl,
+         const NonMatching::LocationToLevelSet location = NonMatching::LocationToLevelSet::inside)
     : sol(std::move(sol))
     , discretization(discretization)
     , stiffness(stiffness)
     , pde_type(pde_type)
     , cfl(cfl)
+    , location(location)
   {
     // copy so we own the matrix — avoids dangling reference
     this->system_matrix.copy_from(system_matrix);
@@ -76,10 +78,7 @@ public:
 
   double get_final_time() const
   {
-    if constexpr (has_final_time<SolutionSet>::value)
-      return sol.final_time;
-    else
-      return 0.0;
+    return actual_final_time;
   }
 
 private:
@@ -88,9 +87,11 @@ private:
   StiffnessMatrixOperator<dim>          &stiffness;
   int                                    pde_type;
   double                                 cfl;
+  const NonMatching::LocationToLevelSet location;
   TrilinosWrappers::SparseMatrix         system_matrix;
   TrilinosWrappers::SolverDirect         solver_direct;
   VectorType                             solution;
+  double                                 actual_final_time = 0.0;
 
   // ── Solve: system_matrix * solution_out = rhs(t) - K*previous_u
   void solve_at_time(const double      t,
@@ -112,6 +113,7 @@ private:
     discretization.initialize_dof_vector(dummy);
     solve_at_time(0.0, dummy, solution);
     solution.update_ghost_values();
+    actual_final_time = 0.0;
   }
 
   // ── Heat ────────────────────────────────────────────────────
@@ -122,8 +124,12 @@ private:
     {
       VectorType old_u;
       discretization.initialize_dof_vector(old_u);
+      const Function<dim> *required_initial_data = (location == NonMatching::LocationToLevelSet::outside && 
+                                                            sol.initial_data_other != nullptr)
+                                                            ? sol.initial_data_other.get()
+                                                            : sol.initial_data.get();
       VectorTools::interpolate(discretization.get_dof_handler(),
-                               *sol.initial_data, old_u);
+                               *required_initial_data, old_u);
 
       double t        = sol.initial_time;
       const double dt = cfl * std::pow(discretization.get_dx(), 2);
@@ -164,6 +170,7 @@ private:
         old_u = solution;
         t += step;
       }
+      actual_final_time = t;
       solution.update_ghost_values();
     }
   }
@@ -178,10 +185,18 @@ private:
       VectorType old_u, old_v;
       discretization.initialize_dof_vector(old_u);
       discretization.initialize_dof_vector(old_v);
+      const Function<dim> *required_initial_data = (location == NonMatching::LocationToLevelSet::outside && 
+                                                            sol.initial_data_other != nullptr)
+                                                            ? sol.initial_data_other.get()
+                                                            : sol.initial_data.get();
+      const Function<dim> *required_derivative_initial_data = (location == NonMatching::LocationToLevelSet::outside && 
+                                                            sol.derivative_initial_data_other != nullptr)
+                                                            ? sol.derivative_initial_data_other.get()
+                                                            : sol.derivative_initial_data.get();                                  
       VectorTools::interpolate(discretization.get_dof_handler(),
-                               *sol.initial_data,        old_u);
+                               *required_initial_data, old_u);
       VectorTools::interpolate(discretization.get_dof_handler(),
-                               *sol.derivative_initial_data, old_v);
+                               *required_derivative_initial_data, old_v);                         
 
       double t        = sol.initial_time;
       const double dt = cfl * discretization.get_dx();
@@ -243,6 +258,7 @@ private:
         old_u = solution;
         t += step;
       }
+      actual_final_time = t;
       solution.update_ghost_values();
     }
   }

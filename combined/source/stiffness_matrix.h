@@ -157,24 +157,23 @@ public:
                       const auto quadrature_value_jump =
                         (quadrature_values_0[q] - quadrature_values_1[q]);
                       const auto quadrature_gradient_avg =
-                        // 0.5 *
-                        // (c_surface * quadrature_gradients_0[q] + c_surface_other * quadrature_gradients_1[q]);
-                        (k_1 * c_surface * quadrature_gradients_0[q] + k_2 * c_surface_other * quadrature_gradients_1[q]);
+                         (k_1 * c_surface * quadrature_gradients_0[q] + k_2 * c_surface_other * quadrature_gradients_1[q]);
+                        //  (quadrature_gradients_0[q] +  quadrature_gradients_1[q]);
 
                       cell_vector_0(i) -=
-                        (-k_1 * c_surface * normal * surface_fe_values.shape_grad(i, q) *
+                        (-(k_1) * c_surface * normal * surface_fe_values.shape_grad(i, q) *
                            quadrature_value_jump -
                          surface_fe_values.shape_value(i, q) * normal *
                            quadrature_gradient_avg +
-                         tau_parameter / cell_side_length *
+                         tau_parameter / cell_side_length * 
                            surface_fe_values.shape_value(i, q) *
                            quadrature_value_jump) *
                         surface_fe_values.JxW(q);
 
                       cell_vector_1(i) -=
-                        (-k_2 * c_surface_other * normal * surface_fe_values.shape_grad(i, q) *
+                        (-(k_2) * c_surface_other * normal * surface_fe_values.shape_grad(i, q) *
                            quadrature_value_jump +
-                         surface_fe_values.shape_value(i, q) * normal *
+                         surface_fe_values.shape_value(i, q) * normal * 
                            quadrature_gradient_avg -
                          tau_parameter / cell_side_length *
                            surface_fe_values.shape_value(i, q) *
@@ -673,7 +672,7 @@ private:
                   Tensor<1, dim> normal =
                     surface_fe_values->normal_vector(q);
                   
-                  if(cavity){
+                  if(location == NonMatching::LocationToLevelSet::outside){
                     normal = (-1) * normal;
                   }
                   double c_surface= required_speed->value(point);
@@ -836,7 +835,6 @@ private:
                     fe_interface_values.normal(q);
                   const Point<dim> point= fe_interface_values.quadrature_point(q);
                   double c_interface= required_speed->value(point);
-                  // std::cout<<point[0]<<" "<< point[1]<<" "<<c_interface<<std::endl;
                   for (unsigned int i = 0; i < n_interface_dofs; ++i)
                       {              
                         local_rhs_stabilization(i) -=

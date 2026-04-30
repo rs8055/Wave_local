@@ -30,6 +30,8 @@ struct SolutionSet
     std::unique_ptr<Function<dim>> outer_gradient_function;
     std::unique_ptr<Function<dim>> initial_data;
     std::unique_ptr<Function<dim>> derivative_initial_data;
+    std::unique_ptr<Function<dim>> initial_data_other;
+    std::unique_ptr<Function<dim>> derivative_initial_data_other;
     double initial_time;
     double final_time;
 };
@@ -45,7 +47,7 @@ public:
   double value(const Point<dim> &p,
                const unsigned int = 0) const override
   {
-    return p[0]; // zero level set is x=0
+    return p[0] - 1e-6; // zero level set is x=0
   }
 };
 
@@ -57,7 +59,7 @@ public:
   double value(const Point<dim> &p,
                const unsigned int = 0) const override
   {
-    return p[0] + p[1] - 1e-8; // zero level set is x+y=0
+    return p[0] + p[1]; // zero level set is x+y=0
   }
 };
 
@@ -744,7 +746,20 @@ public:
                  const unsigned int component = 0) const override
       {
         // const double t = this->get_time();
-        const double c = (p[0] < 0) ? 1 : 4;
+        const double c = 1;
+        return (1.0/c) * p[0] * std::sin(M_PI * p[1]);
+      }
+};
+
+template <int dim>
+class InitialDataOther5 : public Function<dim>
+{
+public:
+    double value(const Point<dim> &p,
+                 const unsigned int component = 0) const override
+      {
+        // const double t = this->get_time();
+        const double c = 4;
         return (1.0/c) * p[0] * std::sin(M_PI * p[1]);
       }
 };
@@ -761,6 +776,7 @@ public:
         return 0.0;
     }
 };
+
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════
 //  SOLUTION 6: Interface Problem with constant but different speed both sides from SIAM Journal of Sci. Comp.
@@ -872,16 +888,22 @@ public:
                  const unsigned int component = 0) const override
       {
         // const double t = this->get_time();
+        const double k_2 = (1-(0.25)*std::sqrt(7))/(1+(0.25)*std::sqrt(7));
+        return std::cos(p[0]+p[1]) + k_2 * std::cos(p[0]-p[1]);
+      }
+};
+
+template <int dim>
+class InitialDataOther6 : public Function<dim>
+{
+public:
+    double value(const Point<dim> &p,
+                 const unsigned int component = 0) const override
+      {
+        // const double t = this->get_time();
         const double k_1 = std::sqrt(7);
         const double k_2 = (1-(0.25)*std::sqrt(7))/(1+(0.25)*std::sqrt(7));
-        if(p[0]<=0)
-        {
-            return std::cos(p[0]+p[1]) + k_2 * std::cos(p[0]-p[1]);
-        }
-        else
-        {
-            return (1+k_2) * std::cos(k_1 * p[0] + p[1]);
-        }
+        return (1+k_2) * std::cos(k_1 * p[0] + p[1]);
       }
 };
 
@@ -893,16 +915,22 @@ public:
                  const unsigned int component = 0) const override
     {
         (void)component;
+        const double k_2 = (1-(0.25)*std::sqrt(7))/(1+(0.25)*std::sqrt(7));
+        return std::sqrt(2) * 1 * std::sin(p[0]+p[1]) - std::sqrt(2) * 1 * k_2 * std::sin(p[0]-p[1]);
+    }
+};
+
+template <int dim>
+class DerivativeInitialDataOther6 : public Function<dim>
+{
+public:
+    double value(const Point<dim> &p,
+                 const unsigned int component = 0) const override
+    {
+        (void)component;
         const double k_1 = std::sqrt(7);
         const double k_2 = (1-(0.25)*std::sqrt(7))/(1+(0.25)*std::sqrt(7));
-        if(p[0]<=0)
-        {
-            return std::sqrt(2) * 1 * std::sin(p[0]+p[1]) - std::sqrt(2) * 1 * k_2 * std::sin(p[0]-p[1]);
-        }
-        else
-        {
-            return std::sqrt(2) * 1 * (1+k_2) * std::sin(k_1 * p[0] + p[1]);
-        }
+        return std::sqrt(2) * 1 * (1+k_2) * std::sin(k_1 * p[0] + p[1]);
     }
 };
 
@@ -1009,15 +1037,18 @@ public:
     double value(const Point<dim> &p,
                  const unsigned int component = 0) const override
       {
-        // const double t = this->get_time();
-        if(p[0]+p[1]<0)
-        {
-            return std::cos(p[0]) + std::cos(-p[1]);
-        }
-        else
-        {
-            return (2) * std::cos((0.5) *(p[0] - p[1]));
-        }
+        return std::cos(p[0]) + std::cos(-p[1]);
+      }
+};
+
+template <int dim>
+class InitialDataOther7 : public Function<dim>
+{
+public:
+    double value(const Point<dim> &p,
+                 const unsigned int component = 0) const override
+      {
+        return (2) * std::cos((0.5) *(p[0] - p[1]));
       }
 };
 
@@ -1029,14 +1060,19 @@ public:
                  const unsigned int component = 0) const override
     {
         (void)component;
-        if(p[0]+p[1]<0)
-        {
-            return std::sin(p[0]) + std::sin(-p[1]);
-        }
-        else
-        {
-            return (2) * std::sin((0.5) *(p[0] - p[1]));
-        }
+        return std::sin(p[0]) + std::sin(-p[1]);
+    }
+};
+
+template <int dim>
+class DerivativeInitialDataOther7 : public Function<dim>
+{
+public:
+    double value(const Point<dim> &p,
+                 const unsigned int component = 0) const override
+    {
+        (void)component;
+        return (2) * std::sin((0.5) *(p[0] - p[1]));
     }
 };
 
@@ -1078,7 +1114,7 @@ public:
         const double t = this->get_time();
         // const double k_1 = std::sqrt(7.0/2.0);
         const double k_2 = (1-(0.25)*std::sqrt(7))/(1+(0.25)*std::sqrt(7));
-        if(p[0]+p[1]<0)
+        if(p[0]+p[1]<1e-6)
         {
             return std::cos(p[0] - t) + k_2 * std::cos(-p[1] - t);
         }
@@ -1110,7 +1146,7 @@ public:
         const double t = this->get_time();
         // const double k_1 = std::sqrt(7.0/2.0);
         const double k_2 = (1-(0.25)*std::sqrt(7))/(1+(0.25)*std::sqrt(7));
-        if(p[0]+p[1]<0)
+        if(p[0]+p[1]<1e-6)
         {
             return std::cos(p[0] - t) + k_2 * std::cos(-p[1] - t);
         }
@@ -1131,7 +1167,7 @@ public:
         const double t = this->get_time();
         // const double k_1 = std::sqrt(7.0/2.0);
         const double k_2 = (1-(0.25)*std::sqrt(7))/(1+(0.25)*std::sqrt(7));
-        if(p[0]+p[1]<0)
+        if(p[0]+p[1]<1e-6)
         {
             return std::cos(p[0] - t) + k_2 * std::cos(-p[1] - t);
         }
@@ -1149,17 +1185,19 @@ public:
     double value(const Point<dim> &p,
                  const unsigned int component = 0) const override
       {
-        // const double t = this->get_time();
-        // const double k_1 = std::sqrt(7.0/2.0);
         const double k_2 = (1-(0.25)*std::sqrt(7))/(1+(0.25)*std::sqrt(7));
-        if(p[0]+p[1]<0)
-        {
-            return std::cos(p[0]) + k_2 * std::cos(-p[1]);
-        }
-        else
-        {
-            return (2.0/(1+(0.25)*std::sqrt(7))) * std::cos(((std::sqrt(7)+1.0)/2) * p[0] + ((std::sqrt(7)-1.0)/2) * p[1]);
-        }
+        return std::cos(p[0]) + k_2 * std::cos(-p[1]);
+      }
+};
+
+template <int dim>
+class InitialDataOther8 : public Function<dim>
+{
+public:
+    double value(const Point<dim> &p,
+                 const unsigned int component = 0) const override
+      {
+        return (2.0/(1+(0.25)*std::sqrt(7))) * std::cos(((std::sqrt(7)+1.0)/2) * p[0] + ((std::sqrt(7)-1.0)/2) * p[1]);
       }
 };
 
@@ -1171,16 +1209,20 @@ public:
                  const unsigned int component = 0) const override
     {
         (void)component;
-        // const double k_1 = std::sqrt(7.0/2.0);
         const double k_2 = (1-(0.25)*std::sqrt(7))/(1+(0.25)*std::sqrt(7));
-        if(p[0]+p[1]<0)
-        {
-            return std::sin(p[0]) + k_2 * std::sin(-p[1]);
-        }
-        else
-        {
-            return (2.0/(1+(0.25)*std::sqrt(7))) * std::sin(((std::sqrt(7)+1.0)/2) * p[0] + ((std::sqrt(7)-1.0)/2) * p[1]);
-        }
+        return std::sin(p[0]) + k_2 * std::sin(-p[1]);
+    }
+};
+
+template <int dim>
+class DerivativeInitialDataOther8 : public Function<dim>
+{
+public:
+    double value(const Point<dim> &p,
+                 const unsigned int component = 0) const override
+    {
+        (void)component;
+        return (2.0/(1+(0.25)*std::sqrt(7))) * std::sin(((std::sqrt(7)+1.0)/2) * p[0] + ((std::sqrt(7)-1.0)/2) * p[1]);
     }
 };
 
@@ -1275,6 +1317,7 @@ SolutionSet<dim> make_solution(const int choice)
             s.interface_boundary_condition = std::make_unique<InterfaceBoundaryCondition5<dim>>();
             s.outer_boundary_condition     = std::make_unique<OuterBoundaryCondition5<dim>>();
             s.initial_data                 = std::make_unique<InitialData5<dim>>();
+            s.initial_data_other           = std::make_unique<InitialDataOther5<dim>>();
             s.derivative_initial_data      = std::make_unique<DerivativeInitialData5<dim>>();
             s.initial_time                 = 0.0;
             s.final_time                   = 2.0 * M_PI ;
@@ -1288,7 +1331,9 @@ SolutionSet<dim> make_solution(const int choice)
             s.interface_boundary_condition = std::make_unique<InterfaceBoundaryCondition6<dim>>();
             s.outer_boundary_condition     = std::make_unique<OuterBoundaryCondition6<dim>>();
             s.initial_data                 = std::make_unique<InitialData6<dim>>();
+            s.initial_data_other           = std::make_unique<InitialDataOther6<dim>>();
             s.derivative_initial_data      = std::make_unique<DerivativeInitialData6<dim>>();
+            s.derivative_initial_data_other= std::make_unique<DerivativeInitialDataOther6<dim>>();
             s.initial_time                 = 0.0;
             s.final_time                   = 2.0;
             s.speed                        = std::make_unique<Speed6<dim>>();
@@ -1301,7 +1346,9 @@ SolutionSet<dim> make_solution(const int choice)
             s.interface_boundary_condition = std::make_unique<InterfaceBoundaryCondition7<dim>>();
             s.outer_boundary_condition     = std::make_unique<OuterBoundaryCondition7<dim>>();
             s.initial_data                 = std::make_unique<InitialData7<dim>>();
+            s.initial_data_other           = std::make_unique<InitialDataOther7<dim>>();
             s.derivative_initial_data      = std::make_unique<DerivativeInitialData7<dim>>();
+            s.derivative_initial_data_other= std::make_unique<DerivativeInitialDataOther7<dim>>();
             s.initial_time                 = 0.0;
             s.final_time                   = 2.0;
             s.speed                        = std::make_unique<Speed7<dim>>();
@@ -1314,7 +1361,9 @@ SolutionSet<dim> make_solution(const int choice)
             s.interface_boundary_condition = std::make_unique<InterfaceBoundaryCondition8<dim>>();
             s.outer_boundary_condition     = std::make_unique<OuterBoundaryCondition8<dim>>();
             s.initial_data                 = std::make_unique<InitialData8<dim>>();
+            s.initial_data_other           = std::make_unique<InitialDataOther8<dim>>();
             s.derivative_initial_data      = std::make_unique<DerivativeInitialData8<dim>>();
+            s.derivative_initial_data_other= std::make_unique<DerivativeInitialDataOther8<dim>>();
             s.initial_time                 = 0.0;
             s.final_time                   = 2.0;
             s.speed                        = std::make_unique<Speed8<dim>>();

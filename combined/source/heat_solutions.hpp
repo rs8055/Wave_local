@@ -29,6 +29,7 @@ struct SolutionSet
     std::unique_ptr<Function<dim>> interface_gradient_function;
     std::unique_ptr<Function<dim>> outer_gradient_function;
     std::unique_ptr<Function<dim>> initial_data;
+    std::unique_ptr<Function<dim>> initial_data_other;
     double initial_time;
     double final_time;
     // double speed;

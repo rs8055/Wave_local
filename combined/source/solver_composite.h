@@ -73,10 +73,7 @@ public:
 
   double get_final_time() const
   {
-    if constexpr (has_final_time<SolutionSet>::value)
-      return sol.final_time;
-    else
-      return 0.0;
+    return actual_final_time;
   }
 
 private:
@@ -85,6 +82,7 @@ private:
   StiffnessMatrixOperator<dim>          &stiffness;
   int                                    pde_type;
   double                                 cfl;
+  double                                 actual_final_time = 0.0;
 
   // One matrix + solver per block
   TrilinosWrappers::SparseMatrix  system_matrix[2];
@@ -126,6 +124,7 @@ private:
     solve_at_time(0.0, dummy, solution);
     solution.block(0).update_ghost_values();
     solution.block(1).update_ghost_values();
+    actual_final_time = 0.0;
   }
 
   // ── Heat ────────────────────────────────────────────────────
@@ -138,8 +137,11 @@ private:
       BlockVectorType old_u = make_block_vector();
       VectorTools::interpolate(discretization.get_dof_handler(),
                                *sol.initial_data, old_u.block(0));
+      const Function<dim> *required_initial_data = (sol.initial_data_other != nullptr)
+                                                            ? sol.initial_data_other.get()
+                                                            : sol.initial_data.get();                                  
       VectorTools::interpolate(discretization.get_dof_handler(),
-                               *sol.initial_data, old_u.block(1));
+                               *required_initial_data, old_u.block(1));
 
       double       t        = sol.initial_time;
       const double dt       = cfl * std::pow(discretization.get_dx(), 2);
@@ -179,6 +181,7 @@ private:
         old_u = solution;
         t += step;
       }
+      actual_final_time = t;
       solution.block(0).update_ghost_values();
       solution.block(1).update_ghost_values();
     }
@@ -198,11 +201,18 @@ private:
       VectorTools::interpolate(discretization.get_dof_handler(),
                                *sol.initial_data,            old_u.block(0));
       VectorTools::interpolate(discretization.get_dof_handler(),
-                               *sol.initial_data,            old_u.block(1));
-      VectorTools::interpolate(discretization.get_dof_handler(),
                                *sol.derivative_initial_data, old_v.block(0));
+      
+      const Function<dim> *required_initial_data = (sol.initial_data_other != nullptr)
+                                                            ? sol.initial_data_other.get()
+                                                            : sol.initial_data.get();
+      const Function<dim> *required_derivative_initial_data = (sol.derivative_initial_data_other != nullptr)
+                                                            ? sol.derivative_initial_data_other.get()
+                                                            : sol.derivative_initial_data.get();                                  
       VectorTools::interpolate(discretization.get_dof_handler(),
-                               *sol.derivative_initial_data, old_v.block(1));
+                               *required_initial_data, old_u.block(1));
+      VectorTools::interpolate(discretization.get_dof_handler(),
+                               *required_derivative_initial_data, old_v.block(1)); 
 
       double       t  = sol.initial_time;
       const double dt = cfl * discretization.get_dx();
@@ -255,6 +265,7 @@ private:
         old_u = solution;
         t += step;
       }
+      actual_final_time = t;
       solution.block(0).update_ghost_values();
       solution.block(1).update_ghost_values();
     }
