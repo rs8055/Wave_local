@@ -23,6 +23,7 @@ struct SolutionSet
     std::unique_ptr<Function<dim>> speed_other;
     std::unique_ptr<Function<dim>> analytical_solution;
     std::unique_ptr<Function<dim>> level_set_function;
+    std::vector<std::unique_ptr<Function<dim>>> level_set_functions;
     std::unique_ptr<Function<dim>> rhs_function;
     std::unique_ptr<Function<dim>> interface_boundary_condition;
     std::unique_ptr<Function<dim>> outer_boundary_condition;
@@ -32,7 +33,6 @@ struct SolutionSet
     std::unique_ptr<Function<dim>> initial_data_other;
     double initial_time;
     double final_time;
-    // double speed;
 };
 
 

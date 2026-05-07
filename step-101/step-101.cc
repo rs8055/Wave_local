@@ -99,9 +99,7 @@ namespace Step101
     AssertIndexRange(component, this->n_components);
     (void)component;
 
-    // return 1.0;
-    const double k_2 = (1-(0.25)*std::sqrt(7))/(1+(0.25)*std::sqrt(7));
-        if(p[0]+p[1]<-1e-6)
+        if(p[0]+p[1]<+1e-6)
         {
             return 1;
         }
@@ -109,8 +107,6 @@ namespace Step101
         {
             return 0.25;
         }
-    // return 1+p[0]*p[1];
-
   }
 
 
@@ -132,16 +128,9 @@ namespace Step101
     AssertIndexRange(component, this->n_components);
     (void)component;
     const double t = this->get_time();
-    // return (1. - 2. / dim * (p.norm_square() - 1.))* std::exp(-t);
-
-    // return std::sin(p[0]) * std::sin(p[1]) * std::cos(2.0 * t);
-    // return 0.0;
-
-    // const double alpha_0 = 2.4048255577; // first zero of J0
-    // return std::cyl_bessel_j(0, alpha_0 * p.norm()) * std::cos(2 * alpha_0 * t);
 
     const double k_2 = (1-(0.25)*std::sqrt(7))/(1+(0.25)*std::sqrt(7));
-        if(p[0]+p[1]<-1e-6)
+        if(p[0]+p[1]<+1e-6)
         {
             return std::cos(p[0] - t) + k_2 * std::cos(-p[1] - t);
         }
@@ -149,8 +138,6 @@ namespace Step101
         {
             return (2.0/(1+(0.25)*std::sqrt(7))) * std::cos(((std::sqrt(7)+1.0)/2) * p[0] + ((std::sqrt(7)-1.0)/2) * p[1] -  t);
         }
-
-    // return std::cos(p[0]) + std::cos(t);
   }
 
   // ==================================================================
@@ -202,16 +189,7 @@ namespace Step101
     AssertIndexRange(component, this->n_components);
     (void)component;
     const double t = this->get_time();
-    // return (1. - 2. / dim * (p.norm_square() - 1.))* std::exp(-t) + 4* std::exp(-t);
     return 0.0;
-    // return std::cos(p[0]) - std::cos(t);
-
-    // const double alpha_0 = 2.4048255577; // first zero of J0
-    // return std::pow(alpha_0,2) * (-2) * std::cyl_bessel_j(0, alpha_0 * p.norm()) * std::cos(2 * alpha_0 * t);
-  //   return std::cos(2.0*t) * (
-  //   (-4.0 + 2.0*(1+p[0]*p[1])) * std::sin(p[0]) * std::sin(p[1])
-  // - p[1] * std::cos(p[0]) * std::sin(p[1])
-  // - p[0] * std::sin(p[0]) * std::cos(p[1]));
   };
 
   // ==================================================================
@@ -221,35 +199,24 @@ namespace Step101
   class LevelSetFunction : public Function<dim>
   {
   public:
-    LevelSetFunction(double R, double R0, unsigned int n)
-      : Function<dim>(1), R(R), R0(R0), n(n) {}
+      LevelSetFunction(const unsigned int domain_index)
+          : Function<dim>(1), domain_index(domain_index) {}
 
-    virtual double value(const Point<dim> &p,
-                        const unsigned int component = 0) const override;
+      double value(const Point<dim> &p, unsigned int = 0) const override
+      {
+          switch (domain_index)
+          {
+              case 0: return p[0] + p[1];        // φ₁
+              case 1: return -(p[0] + p[1]);     // φ₂
+              // add more cases here
+              default: AssertThrow(false, ExcMessage("Unknown domain index"));
+                      return 0.0;
+          }
+      }
 
   private:
-    const double R;
-    const double R0;
-    const unsigned int n;
+      const unsigned int domain_index;
   };
-
-  template <int dim>
-  double LevelSetFunction<dim>::value(const Point<dim> &p,
-                                      const unsigned int component) const
-  {
-    AssertIndexRange(component, this->n_components);
-    (void)component;
-
-    // const double x = p[0];
-    // const double y = p[1];
-
-    // const double r = std::sqrt(x*x + y*y);
-    // const double theta = std::atan2(y, x);
-
-    // return  r - (R + R0 * std::sin(n * theta));
-    return p[0] + p[1];
-    // return p[0] * p[0] - p[1] * p[1] ;
-  }
 
   // ==================================================================
   // Outer Boundary Values
@@ -269,23 +236,8 @@ namespace Step101
     AssertIndexRange(component, this->n_components);
     (void)component;
     const double t = this->get_time();
-    // return (1. - 2. / dim * (p.norm_square() - 1.))* std::exp(-t);
-
-    // return std::sin(p[0]) * std::sin(p[1]) * std::cos(2.0 * t);
-
-    // const double alpha_0 = 2.4048255577; // first zero of J0
-    // return std::cyl_bessel_j(0, alpha_0 * p.norm()) * std::cos(2 * alpha_0 * t);
-
-    // if (point[1]<-1.5+1e-7){
-    //   return std::cos((M_PI)*p[0]/3)*std::exp(-(std::pow(t-3,2))/(std::pow(0.25,2)));
-    // }
-    // else{
-    //   return 0.0;
-    // }
-    // return 0.0;
-
     const double k_2 = (1-(0.25)*std::sqrt(7))/(1+(0.25)*std::sqrt(7));
-        if(p[0]+p[1]<-1e-6)
+        if(p[0]+p[1]<0)
         {
             return std::cos(p[0] - t) + k_2 * std::cos(-p[1] - t);
         }
@@ -293,7 +245,6 @@ namespace Step101
         {
             return (2.0/(1+(0.25)*std::sqrt(7))) * std::cos(((std::sqrt(7)+1.0)/2) * p[0] + ((std::sqrt(7)-1.0)/2) * p[1] -  t);
         }
-    // return std::cos(p[0]) + std::cos(t);
   }
 
 
@@ -315,18 +266,8 @@ namespace Step101
     AssertIndexRange(component, this->n_components);
     (void)component;
     const double t = this->get_time();
-    // return (1. - 2. / dim * (p.norm_square() - 1.))* std::exp(-t);
-
-    // return std::sin(p[0]) * std::sin(p[1]) * std::cos(2.0 * t);
-
-    // const double alpha_0 = 2.4048255577; // first zero of J0
-    // return std::cyl_bessel_j(0, alpha_0 * p.norm()) * std::cos(2 * alpha_0 * t);
-
-
-    // return 0.0;
-
     const double k_2 = (1-(0.25)*std::sqrt(7))/(1+(0.25)*std::sqrt(7));
-        if(p[0]+p[1]<-1e-6)
+        if(p[0]+p[1]<0)
         {
             return std::cos(p[0] - t) + k_2 * std::cos(-p[1] - t);
         }
@@ -334,7 +275,6 @@ namespace Step101
         {
             return (2.0/(1+(0.25)*std::sqrt(7))) * std::cos(((std::sqrt(7)+1.0)/2) * p[0] + ((std::sqrt(7)-1.0)/2) * p[1] -  t);
         }
-    // return std::cos(p[0]) + std::cos(t);
   }
 
 
@@ -356,25 +296,16 @@ namespace Step101
   {
     AssertIndexRange(component, this->n_components);
     (void)component;
-    // return 1.0 - 2.0 / dim * (p.norm_square() - 1.0);
-    // return std::sin(p[0]) * std::sin(p[1]);
-
-    // return 0.0;
-
-    // const double alpha_0 = 2.4048255577; // first zero of J0
-    // return std::cyl_bessel_j(0, alpha_0 * p.norm());
 
     const double k_2 = (1-(0.25)*std::sqrt(7))/(1+(0.25)*std::sqrt(7));
-        if(p[0]+p[1]<-1e-6)
-        {
+    //     if(p[0]+p[1]<-1e-6)
+    //     {
             return std::cos(p[0]) + k_2 * std::cos(-p[1]);
-        }
-        else
-        {
-            return (2.0/(1+(0.25)*std::sqrt(7))) * std::cos(((std::sqrt(7)+1.0)/2) * p[0] + ((std::sqrt(7)-1.0)/2) * p[1]);
-        }
-
-    // return std::cos(p[0]) + 1;
+    //     }
+    //     else
+    //     {
+            // return (2.0/(1+(0.25)*std::sqrt(7))) * std::cos(((std::sqrt(7)+1.0)/2) * p[0] + ((std::sqrt(7)-1.0)/2) * p[1]);
+        // }
   }
 
   // ==================================================================
@@ -394,19 +325,16 @@ namespace Step101
   {
     AssertIndexRange(component, this->n_components);
     (void)component;
-    // return - (1.0 - 2.0 / dim * (p.norm_square() - 1.0));
-    // return 0.0;
 
     const double k_2 = (1-(0.25)*std::sqrt(7))/(1+(0.25)*std::sqrt(7));
-        if(p[0]+p[1]<-1e-6)
-        {
+    //     if(p[0]+p[1]<-1e-6)
+    //     {
             return std::sin(p[0]) + k_2 * std::sin(-p[1]);
-        }
-        else
-        {
-            return (2.0/(1+(0.25)*std::sqrt(7))) * std::sin(((std::sqrt(7)+1.0)/2) * p[0] + ((std::sqrt(7)-1.0)/2) * p[1]);
-        }
-    // return 0.0;
+    //     }
+    //     else
+    //     {
+            // return (2.0/(1+(0.25)*std::sqrt(7))) * std::sin(((std::sqrt(7)+1.0)/2) * p[0] + ((std::sqrt(7)-1.0)/2) * p[1]);
+        // }
   }
 
 
@@ -440,11 +368,12 @@ namespace Step101
       const unsigned int face_index) const;
 
     const unsigned int fe_degree;
-    
+    const int n_domains;
     
     GradientSolution<dim> gradient_function;
     RightHandSide<dim>      rhs_function;
-    LevelSetFunction<dim> level_set_function;
+    // LevelSetFunction<dim> level_set_function;
+    std::vector<std::unique_ptr<LevelSetFunction<dim>>> level_set_functions;
     BoundaryValues<dim>   boundary_condition;
     InterfaceBoundaryValues<dim>   interface_boundary_condition;
     InitialCondition<dim> initial_condition;
@@ -457,19 +386,18 @@ namespace Step101
     // discrete level set function that describes the geometry of the domain.
     const FE_Q<dim> fe_level_set;
     DoFHandler<dim> level_set_dof_handler;
-    LinearAlgebra::distributed::Vector<double>  level_set;
-    // LinearAlgebra::distributed::Vector<double>  wave_speed_set;
+    std::vector<LinearAlgebra::distributed::Vector<double>> level_sets;
 
-    // The second DoFHandler manages the DoFs for the solution of the Poisson
-    // equation.
     hp::FECollection<dim> fe_collection;
-    DoFHandler<dim>       dof_handler;
+    // DoFHandler<dim>       dof_handler;
+    std::vector<std::unique_ptr<DoFHandler<dim>>> dof_handlers;
     LinearAlgebra::distributed::Vector<double> solution;          // u^n
     LinearAlgebra::distributed::Vector<double> old_solution;      // u^{n-1}
     LinearAlgebra::distributed::Vector<double> derivative_solution;          // u^n
     LinearAlgebra::distributed::Vector<double> old_derivative_solution;      // u^{n-1}
 
-    NonMatching::MeshClassifier<dim> mesh_classifier;
+    // NonMatching::MeshClassifier<dim> mesh_classifier;
+    std::vector<std::unique_ptr<NonMatching::MeshClassifier<dim>>>      mesh_classifiers;
 
     TrilinosWrappers::SparseMatrix mass_matrix;
     TrilinosWrappers::SparseMatrix stiffness_matrix;
@@ -487,10 +415,6 @@ namespace Step101
     double       final_time;
     unsigned int timestep_number;
     
-    // Theta parameter for time discretization
-    // theta = 0: Forward Euler (explicit)
-    // theta = 0.5: Crank-Nicolson
-    // theta = 1: Backward Euler (implicit, most stable)
     const double theta;
 
     const std::string lin_solver_type;
@@ -501,19 +425,19 @@ namespace Step101
   template <int dim>
   WaveSolver<dim>::WaveSolver()
     : fe_degree(2)
-    , level_set_function(0.5, 0.1, 5)   
+    , n_domains(2)
     , triangulation(MPI_COMM_WORLD)
     , fe_level_set(fe_degree)    
     , level_set_dof_handler(triangulation)
-    , dof_handler(triangulation)
-    , mesh_classifier(level_set_dof_handler, level_set)
+    // , dof_handler(triangulation)
     , time(0.0)           
     , time_step(0.005)     
     , final_time(4.0)     
     , timestep_number(0)
     , theta(0.0)
     , lin_solver_type("direct")
-  {}
+  { 
+  }
 
 
 
@@ -524,41 +448,41 @@ namespace Step101
   template <int dim>
   void WaveSolver<dim>::make_grid()
   {
-    //std::cout << "Creating background mesh" << std::endl;
-    // Triangulation<dim> triangulation_quad;
     GridGenerator::hyper_cube(triangulation, -2, 2);  
-    // GridGenerator::hyper_cube(triangulation, -1.5 , 1.5);
-    // GridGenerator::convert_hypercube_to_simplex_mesh (triangulation_quad,
-    //                                               triangulation);
     triangulation.refine_global(2);
+
+    for (int i = 0; i < n_domains; ++i){dof_handlers.push_back(std::make_unique<DoFHandler<dim>>(triangulation));}
+    
+    for (int i = 0; i < n_domains; ++i){level_set_functions.push_back(
+        std::make_unique<LevelSetFunction<dim>>(i));}
   }
 
-
-
-  // @sect3{Setting up the Discrete Level Set Function}
-  // The discrete level set function is defined on the whole background mesh.
-  // Thus, to set up the DoFHandler for the level set function, we distribute
-  // DoFs over all elements in $\mathcal{T}_h$. We then set up the discrete
-  // level set function by interpolating onto this finite element space.
   template <int dim>
   void WaveSolver<dim>::setup_discrete_level_set()
   {
-    //std::cout << "Setting up discrete level set function" << std::endl;
-
     level_set_dof_handler.distribute_dofs(fe_level_set);
 
     const auto partitioner = std::make_shared<const Utilities::MPI::Partitioner>(
       level_set_dof_handler.locally_owned_dofs(),
       DoFTools::extract_locally_relevant_dofs(level_set_dof_handler),
       level_set_dof_handler.get_communicator());
-    level_set.reinit(partitioner);
 
-    const Functions::SignedDistance::Sphere<dim> signed_distance_sphere;
-    VectorTools::interpolate(level_set_dof_handler,
-                            //  signed_distance_sphere,
-                            level_set_function,
-                             level_set);
-    level_set.update_ghost_values();
+    level_sets.resize(n_domains);
+    for (int i = 0; i < n_domains; ++i)
+    {
+      level_sets[i].reinit(partitioner);
+      VectorTools::interpolate(level_set_dof_handler,
+                              //  signed_distance_sphere,
+                              *level_set_functions[i],
+                              level_sets[i]);
+      level_sets[i].update_ghost_values();
+    }
+    mesh_classifiers.clear();
+    for (int i = 0; i < n_domains; ++i){
+      mesh_classifiers.push_back(
+        std::make_unique<NonMatching::MeshClassifier<dim>>(
+          level_set_dof_handler, level_sets[i]));
+    }
   }
 
 
@@ -579,25 +503,23 @@ namespace Step101
   template <int dim>
   void WaveSolver<dim>::distribute_dofs()
   {
-    //std::cout << "Distributing degrees of freedom" << std::endl;
-
     fe_collection.push_back(FE_Q<dim>(fe_degree));
     fe_collection.push_back(FE_Nothing<dim>());
 
-    for (const auto &cell : dof_handler.active_cell_iterators() |
+    for (const auto &cell : dof_handlers[0]->active_cell_iterators() |
            IteratorFilters::LocallyOwnedCell())
       {
         const NonMatching::LocationToLevelSet cell_location =
-          mesh_classifier.location_to_level_set(cell);
+          mesh_classifiers[0]->location_to_level_set(cell);
 
-        // if (cell_location == NonMatching::LocationToLevelSet::outside)
-        if (cell_location == NonMatching::LocationToLevelSet::inside)
+        if (cell_location == NonMatching::LocationToLevelSet::outside)
+        // if (cell_location == NonMatching::LocationToLevelSet::inside)
           cell->set_active_fe_index(ActiveFEIndex::nothing);
         else
           cell->set_active_fe_index(ActiveFEIndex::lagrange);
       }
 
-    dof_handler.distribute_dofs(fe_collection);
+    dof_handlers[0]->distribute_dofs(fe_collection);
   }
 
   template <int dim>
@@ -611,8 +533,8 @@ namespace Step101
     };
 
     TrilinosWrappers::SparsityPattern sparsity_pattern;
-    sparsity_pattern.reinit(dof_handler.locally_owned_dofs(),
-                            dof_handler.get_communicator());
+    sparsity_pattern.reinit(dof_handlers[0]->locally_owned_dofs(),
+                            dof_handlers[0]->get_communicator());
 
     const unsigned int           n_components = fe_collection.n_components();
     Table<2, DoFTools::Coupling> cell_coupling(n_components, n_components);
@@ -623,7 +545,7 @@ namespace Step101
     const AffineConstraints<double> constraints;
     const bool                      keep_constrained_dofs = true;
 
-    DoFTools::make_flux_sparsity_pattern(dof_handler,
+    DoFTools::make_flux_sparsity_pattern(*dof_handlers[0],
                                          sparsity_pattern,
                                          constraints,
                                          keep_constrained_dofs,
@@ -638,9 +560,9 @@ namespace Step101
     system_matrix.reinit(sparsity_pattern); 
 
     const auto partitioner = std::make_shared<const Utilities::MPI::Partitioner>(
-      dof_handler.locally_owned_dofs(),
-      DoFTools::extract_locally_active_dofs(dof_handler),
-      dof_handler.get_communicator());
+      dof_handlers[0]->locally_owned_dofs(),
+      DoFTools::extract_locally_active_dofs(*dof_handlers[0]),
+      dof_handlers[0]->get_communicator());
     solution.reinit(partitioner);
 
     old_solution.reinit(solution);
@@ -664,19 +586,19 @@ namespace Step101
       return false;
 
     const NonMatching::LocationToLevelSet cell_location =
-      mesh_classifier.location_to_level_set(cell);
+      mesh_classifiers[0]->location_to_level_set(cell);
 
     const NonMatching::LocationToLevelSet neighbor_location =
-      mesh_classifier.location_to_level_set(cell->neighbor(face_index));
+      mesh_classifiers[0]->location_to_level_set(cell->neighbor(face_index));
 
     if (cell_location == NonMatching::LocationToLevelSet::intersected &&
-        // neighbor_location != NonMatching::LocationToLevelSet::outside)
-        neighbor_location != NonMatching::LocationToLevelSet::inside)
+        neighbor_location != NonMatching::LocationToLevelSet::outside)
+        // neighbor_location != NonMatching::LocationToLevelSet::inside)
       return true;
 
     if (neighbor_location == NonMatching::LocationToLevelSet::intersected &&
-        // cell_location != NonMatching::LocationToLevelSet::outside)
-        cell_location != NonMatching::LocationToLevelSet::inside)        
+        cell_location != NonMatching::LocationToLevelSet::outside)
+        // cell_location != NonMatching::LocationToLevelSet::inside)        
       return true;
 
     return false;
@@ -693,20 +615,9 @@ namespace Step101
     const unsigned int n_dofs_per_cell = fe_collection[0].dofs_per_cell;
     FullMatrix<double> local_mass(n_dofs_per_cell, n_dofs_per_cell);
     FullMatrix<double> local_stiffness(n_dofs_per_cell, n_dofs_per_cell);
-
-    // The below local_rhs will be assembled later on because now it will depend upon time value too while the LHS system matrix is independent of time. Consequently
-    // all the rhs assembly is deleted
-    // Vector<double>     local_rhs(n_dofs_per_cell);
     std::vector<types::global_dof_index> local_dof_indices(n_dofs_per_cell);
 
     const double ghost_parameter_1   = 0.25 * std::sqrt(3.0);
-    // const double ghost_parameter_2   = 0.50 * std::sqrt(3.0);
-    // const double nitsche_parameter = 5 * (fe_degree) * fe_degree;
-    // const double nitsche_parameter = 20;
-    // const double tau_parameter = (0.5) * nitsche_parameter;
-
-    // Since the ghost penalty is similar to a DG flux term, the simplest way to
-    // assemble it is to use an FEInterfaceValues object.
     const QGauss<dim - 1>  face_quadrature(fe_degree + 1);
     FEInterfaceValues<dim> fe_interface_values(fe_collection[0],
                                                face_quadrature,
@@ -730,9 +641,9 @@ namespace Step101
     NonMatching::FEValues<dim> non_matching_fe_values(fe_collection,
                                                       quadrature_1D,
                                                       region_update_flags,
-                                                      mesh_classifier,
+                                                      *mesh_classifiers[0],
                                                       level_set_dof_handler,
-                                                      level_set);
+                                                      level_sets[0]);
 
     NonMatching::RegionUpdateFlags region_update_flags_face;
     region_update_flags_face.outside =
@@ -743,15 +654,15 @@ namespace Step101
       fe_collection,
       quadrature_1D,
       region_update_flags_face,
-      mesh_classifier,
+      *mesh_classifiers[0],
       level_set_dof_handler,
-      level_set);
+      level_sets[0]);
 
     // As we iterate over the cells, we don't need to do anything on the cells
     // that have FE_Nothing elements. To disregard them we use an iterator
     // filter.
     for (const auto &cell :
-         dof_handler.active_cell_iterators() |
+         dof_handlers[0]->active_cell_iterators() |
            IteratorFilters::LocallyOwnedCell() |
            IteratorFilters::ActiveFEIndexEqualTo(ActiveFEIndex::lagrange))
       {
@@ -763,8 +674,8 @@ namespace Step101
         non_matching_fe_values.reinit(cell);
 
         const std::optional<FEValues<dim>> &fe_values =
-          // non_matching_fe_values.get_inside_fe_values();
-          non_matching_fe_values.get_outside_fe_values();
+          non_matching_fe_values.get_inside_fe_values();
+          // non_matching_fe_values.get_outside_fe_values();
 
         if (fe_values)
         {
@@ -777,11 +688,6 @@ namespace Step101
                 {
                   for (const unsigned int j : fe_values->dof_indices())
                     {
-                      // local_stiffness(i, j) +=    
-                      // speed_cell *
-                      // fe_values->shape_grad(i, q) *
-                      //     fe_values->shape_grad(j, q) *
-                      //     fe_values->JxW(q);
                       local_mass(i, j) +=
                         fe_values->shape_value(i, q) *
                         fe_values->shape_value(j, q) *
@@ -791,71 +697,7 @@ namespace Step101
             }
         }
 
-        // const std::optional<NonMatching::FEImmersedSurfaceValues<dim>>
-        //   &surface_fe_values = non_matching_fe_values.get_surface_fe_values();
-
-        // if (surface_fe_values)
-        //   {
-        //     for (const unsigned int q :
-        //          surface_fe_values->quadrature_point_indices())
-        //       {
-        //         const Point<dim> point= surface_fe_values->quadrature_point(q);
-        //           double c_surface= wave_speed.value(point);
-        //         Tensor<1, dim> normal =
-        //           surface_fe_values->normal_vector(q);
-                
-        //         normal=(-1) * normal;      //when we are using cavity domain
-        //         for (const unsigned int i : surface_fe_values->dof_indices())
-        //           {
-        //             for (const unsigned int j : surface_fe_values->dof_indices())
-        //               {
-        //                   local_stiffness(i, j) +=
-        //                     (-normal * surface_fe_values->shape_grad(i, q) *
-        //                       surface_fe_values->shape_value(j, q) +
-        //                     -normal * surface_fe_values->shape_grad(j, q) *
-        //                       surface_fe_values->shape_value(i, q) +
-        //                     tau_parameter / cell_side_length *
-        //                       surface_fe_values->shape_value(i, q) *
-        //                       surface_fe_values->shape_value(j, q)) *
-        //                     surface_fe_values->JxW(q) * c_surface;
-        //               }
-        //           }
-        //       }
-        //   }
         
-        // for (const unsigned int f : cell->face_indices())
-        //   if (cell->at_boundary(f))
-        //     {
-        //       non_matching_fe_interface_values.reinit(cell,f);        
-        //       if (const auto &surface_fe_value_ptr = non_matching_fe_interface_values.get_outside_fe_values()) 
-        //       {
-        //         const auto &surface_fe_values =
-        //                 surface_fe_value_ptr->get_fe_face_values(0);
-        //         for (const unsigned int q :
-        //          surface_fe_values.quadrature_point_indices())
-        //         {
-        //           const Point<dim> point= surface_fe_values.quadrature_point(q);
-        //             double c_surface= wave_speed.value(point);
-        //           const Tensor<1, dim> &normal =
-        //             surface_fe_values.normal_vector(q);
-        //           for (const unsigned int i : surface_fe_values.dof_indices())
-        //             {
-        //               for (const unsigned int j : surface_fe_values.dof_indices())
-        //                 {
-        //                     local_stiffness(i, j) +=
-        //                       (-normal * surface_fe_values.shape_grad(i, q) *
-        //                         surface_fe_values.shape_value(j, q) +
-        //                       -normal * surface_fe_values.shape_grad(j, q) *
-        //                         surface_fe_values.shape_value(i, q) +
-        //                       nitsche_parameter / cell_side_length *
-        //                         surface_fe_values.shape_value(i, q) *
-        //                         surface_fe_values.shape_value(j, q)) *
-        //                       surface_fe_values.JxW(q) * c_surface;
-        //                 }
-        //             }
-        //         }
-        //       }
-        //     }
 
         cell->get_dof_indices(local_dof_indices);
 
@@ -904,19 +746,8 @@ namespace Step101
                           fe_interface_values.jump_in_shape_hessians(i, q) * normal *
                           normal *
                           fe_interface_values.jump_in_shape_hessians(j, q) * normal *
-                          fe_interface_values.JxW(q);                
-                        // local_stabilization(i, j) +=
-                        //   .5 * ghost_parameter_2 * c_interface * cell_side_length * normal *
-                        //   fe_interface_values.jump_in_shape_gradients(i, q) *
-                        //   normal *
-                        //   fe_interface_values.jump_in_shape_gradients(j, q) *
-                        //   fe_interface_values.JxW(q);
-                        // local_stabilization(i, j) +=
-                        //   .5 * ghost_parameter_2 * c_interface * std::pow(cell_side_length,3) * normal *
-                        //   fe_interface_values.jump_in_shape_hessians(i, q) * normal *
-                        //   normal *
-                        //   fe_interface_values.jump_in_shape_hessians(j, q) * normal *
-                        //   fe_interface_values.JxW(q);
+                          fe_interface_values.JxW(q);    
+                          
                       }
                 }
 
@@ -994,9 +825,9 @@ namespace Step101
     NonMatching::FEValues<dim> non_matching_fe_values(fe_collection,
                                                       quadrature_1D,
                                                       region_update_flags,
-                                                      mesh_classifier,
+                                                      *mesh_classifiers[0],
                                                       level_set_dof_handler,
-                                                      level_set);
+                                                      level_sets[0]);
 
     NonMatching::RegionUpdateFlags region_update_flags_face;
     region_update_flags_face.inside =
@@ -1010,12 +841,12 @@ namespace Step101
       fe_collection,
       quadrature_1D,
       region_update_flags_face,
-      mesh_classifier,
+      *mesh_classifiers[0],
       level_set_dof_handler,
-      level_set);                                                  
+      level_sets[0]);                                                  
 
     for (const auto &cell :
-         dof_handler.active_cell_iterators() |
+         dof_handlers[0]->active_cell_iterators() |
            IteratorFilters::LocallyOwnedCell() |
            IteratorFilters::ActiveFEIndexEqualTo(ActiveFEIndex::lagrange))
       if(cell->is_locally_owned())
@@ -1029,8 +860,8 @@ namespace Step101
         // VOLUME SOURCE TERM: ∫ f φᵢ dx
         // ============================================================
         const std::optional<FEValues<dim>> &fe_values =
-          // non_matching_fe_values.get_inside_fe_values();
-          non_matching_fe_values.get_outside_fe_values();
+          non_matching_fe_values.get_inside_fe_values();
+          // non_matching_fe_values.get_outside_fe_values();
 
         if (fe_values)
           {           
@@ -1083,7 +914,7 @@ namespace Step101
                 Tensor<1, dim> normal =
                   surface_fe_values->normal_vector(q);
                 
-                normal=(-1) * normal;      //when we are using cavity domain
+                // normal=(-1) * normal;      //when we are using cavity domain
 
                 interface_boundary_condition.set_time(evaluating_time);
                 const double g_value = interface_boundary_condition.value(point);
@@ -1124,8 +955,8 @@ namespace Step101
           if (cell->at_boundary(f))
             {
               non_matching_fe_interface_values.reinit(cell,f);        
-              // if (const auto &surface_fe_value_ptr = non_matching_fe_interface_values.get_inside_fe_values()) 
-              if (const auto &surface_fe_value_ptr = non_matching_fe_interface_values.get_outside_fe_values()) 
+              if (const auto &surface_fe_value_ptr = non_matching_fe_interface_values.get_inside_fe_values()) 
+              // if (const auto &surface_fe_value_ptr = non_matching_fe_interface_values.get_outside_fe_values()) 
               {
                 const auto &surface_fe_values =
                         surface_fe_value_ptr->get_fe_face_values(0);
@@ -1276,8 +1107,8 @@ namespace Step101
     std::cout << "Writing vtu file" << std::endl;
 
     DataOut<dim> data_out;
-    data_out.add_data_vector(dof_handler, solution, "solution");
-    data_out.add_data_vector(level_set_dof_handler, level_set, "level_set");
+    data_out.add_data_vector(*dof_handlers[0], solution, "solution");
+    data_out.add_data_vector(level_set_dof_handler, level_sets[0], "level_set");
 
     LinearAlgebra::distributed::Vector<double> analytical_solution;
     analytical_solution.reinit(solution);
@@ -1285,18 +1116,18 @@ namespace Step101
     AnalyticalSolution<dim> analytical_solution_fu;
     analytical_solution_fu.set_time(time);
 
-    VectorTools::interpolate(dof_handler,
+    VectorTools::interpolate(*dof_handlers[0],
                              analytical_solution_fu,
                              analytical_solution);
 
-    data_out.add_data_vector(dof_handler, analytical_solution, "analytical");
+    data_out.add_data_vector(*dof_handlers[0], analytical_solution, "analytical");
 
     data_out.set_cell_selection(
       [this](const typename Triangulation<dim>::cell_iterator &cell) {
         return cell->is_active() && cell->is_locally_owned() &&
-               mesh_classifier.location_to_level_set(cell) !=
-                //  NonMatching::LocationToLevelSet::outside;
-                 NonMatching::LocationToLevelSet::inside;
+               mesh_classifiers[0]->location_to_level_set(cell) !=
+                 NonMatching::LocationToLevelSet::outside;
+                //  NonMatching::LocationToLevelSet::inside;
       });
 
     data_out.build_patches();
@@ -1322,9 +1153,9 @@ namespace Step101
     NonMatching::FEValues<dim> non_matching_fe_values(fe_collection,
                                                       quadrature_1D,
                                                       region_update_flags,
-                                                      mesh_classifier,
+                                                      *mesh_classifiers[0],
                                                       level_set_dof_handler,
-                                                      level_set);
+                                                      level_sets[0]);
 
     // We then iterate iterate over the cells that have LocationToLevelSetValue
     // value inside or intersected again. For each quadrature point, we compute
@@ -1334,15 +1165,15 @@ namespace Step101
     double                  error_L2_squared = 0;
 
     for (const auto &cell :
-         dof_handler.active_cell_iterators() |
+         dof_handlers[0]->active_cell_iterators() |
            IteratorFilters::LocallyOwnedCell() |
            IteratorFilters::ActiveFEIndexEqualTo(ActiveFEIndex::lagrange))
       {
         non_matching_fe_values.reinit(cell);
 
         const std::optional<FEValues<dim>> &fe_values =
-        // non_matching_fe_values.get_inside_fe_values();
-          non_matching_fe_values.get_outside_fe_values();
+        non_matching_fe_values.get_inside_fe_values();
+          // non_matching_fe_values.get_outside_fe_values();
 
         if (fe_values)
           {
@@ -1363,7 +1194,7 @@ namespace Step101
 
     solution.zero_out_ghost_values();
 
-    error_L2_squared = Utilities::MPI::sum(error_L2_squared, dof_handler.get_communicator());
+    error_L2_squared = Utilities::MPI::sum(error_L2_squared, dof_handlers[0]->get_communicator());
 
     return std::sqrt(error_L2_squared);
   }
@@ -1394,21 +1225,19 @@ namespace Step101
         const double cell_side_length = 4.0 / std::pow(2.0, 2 + 1 + cycle); // TODO
         time_step = (0.1)*std::pow(cell_side_length,1);
         setup_discrete_level_set();
-        //std::cout << "Classifying cells" << std::endl;
-        mesh_classifier.reclassify();
+        for (int i = 0; i < n_domains; ++i){mesh_classifiers[i]->reclassify();}
         distribute_dofs();
         initialize_matrices();
         assemble_system();
-        VectorTools::interpolate(dof_handler,
+        VectorTools::interpolate(*dof_handlers[0],
                                initial_condition,
                                old_solution);
 
-        VectorTools::interpolate(dof_handler,
+        VectorTools::interpolate(*dof_handlers[0],
                                derivative_initial_condition,
                                old_derivative_solution);                      
 
         double error_L2 = 0.0;    
-        double error_L21 = 0.0;                
         // const double alpha_0 = 2.4048255577; // first zero of J0 
         // final_time = M_PI /(alpha_0);
         // final_time = 2.0 * M_PI / std::sqrt(2.0);
@@ -1519,7 +1348,7 @@ namespace Step101
         // std::cout << std::setprecision(6) << std::scientific;
         for (const std::string col : {"Mesh size", "Time Step", "L2-Error", "Rate"})
           convergence_table.set_precision(col, 8);
-        if(Utilities::MPI::this_mpi_process(dof_handler.get_communicator())== 0)
+        if(Utilities::MPI::this_mpi_process(dof_handlers[0]->get_communicator())== 0)
         {
         convergence_table.write_text(std::cout);
         std::cout << std::endl;

@@ -23,6 +23,7 @@ struct SolutionSet
     std::unique_ptr<Function<dim>> speed_other;
     std::unique_ptr<Function<dim>> analytical_solution;
     std::unique_ptr<Function<dim>> level_set_function;
+    std::vector<std::unique_ptr<Function<dim>>> level_set_functions;
     std::unique_ptr<Function<dim>> rhs_function;
     std::unique_ptr<Function<dim>> interface_boundary_condition;
     std::unique_ptr<Function<dim>> outer_boundary_condition;
@@ -79,6 +80,30 @@ public:
 private:
   double a, b;
 };
+
+// ── Case 4: Multiple Level Set Functions 1 ────────────────────────────────────
+template <int dim>
+  class LSF1 : public Function<dim>
+  {
+  public:
+      LSF1(const unsigned int domain_index)
+          : Function<dim>(1), domain_index(domain_index) {}
+
+      double value(const Point<dim> &p, unsigned int = 0) const override
+      {
+          switch (domain_index)
+          {
+              case 0: return p[0] + p[1];       
+              case 1: return -(p[0] + p[1]);    
+              // add more cases here
+              default: AssertThrow(false, ExcMessage("Unknown domain index"));
+                      return 0.0;
+          }
+      }
+
+  private:
+      const unsigned int domain_index;
+  };
 
 
 
@@ -1239,7 +1264,7 @@ SolutionSet<dim> make_solution(const int choice)
     {
         case 0:
             s.analytical_solution          = std::make_unique<AnalyticalSolution0<dim>>();
-            s.level_set_function           = std::make_unique<AlignedInterface<dim>>();
+            s.level_set_functions.push_back(std::make_unique<AlignedInterface<dim>>());
             s.interface_gradient_function  = std::make_unique<InterfaceGradientSolution0<dim>>();
             s.rhs_function                 = std::make_unique<RHSFunction0<dim>>();
             s.interface_boundary_condition = std::make_unique<InterfaceBoundaryCondition0<dim>>();
@@ -1312,7 +1337,7 @@ SolutionSet<dim> make_solution(const int choice)
             }
         case 5:
             s.analytical_solution          = std::make_unique<AnalyticalSolution5<dim>>();
-            s.level_set_function           = std::make_unique<StraightLineInterface<dim>>();
+            s.level_set_functions.push_back(std::make_unique<StraightLineInterface<dim>>());
             s.rhs_function                 = std::make_unique<RHSFunction5<dim>>();
             s.interface_boundary_condition = std::make_unique<InterfaceBoundaryCondition5<dim>>();
             s.outer_boundary_condition     = std::make_unique<OuterBoundaryCondition5<dim>>();
@@ -1326,7 +1351,7 @@ SolutionSet<dim> make_solution(const int choice)
             break;
         case 6:
             s.analytical_solution          = std::make_unique<AnalyticalSolution6<dim>>();
-            s.level_set_function           = std::make_unique<StraightLineInterface<dim>>();
+            s.level_set_functions.push_back(std::make_unique<StraightLineInterface<dim>>());
             s.rhs_function                 = std::make_unique<RHSFunction6<dim>>();
             s.interface_boundary_condition = std::make_unique<InterfaceBoundaryCondition6<dim>>();
             s.outer_boundary_condition     = std::make_unique<OuterBoundaryCondition6<dim>>();
@@ -1341,7 +1366,7 @@ SolutionSet<dim> make_solution(const int choice)
             break;
         case 7:
             s.analytical_solution          = std::make_unique<AnalyticalSolution7<dim>>();
-            s.level_set_function           = std::make_unique<AlignedInterface<dim>>();
+            s.level_set_functions.push_back(std::make_unique<AlignedInterface<dim>>());
             s.rhs_function                 = std::make_unique<RHSFunction7<dim>>();
             s.interface_boundary_condition = std::make_unique<InterfaceBoundaryCondition7<dim>>();
             s.outer_boundary_condition     = std::make_unique<OuterBoundaryCondition7<dim>>();
@@ -1356,7 +1381,23 @@ SolutionSet<dim> make_solution(const int choice)
             break;
         case 8:
             s.analytical_solution          = std::make_unique<AnalyticalSolution8<dim>>();
-            s.level_set_function           = std::make_unique<AlignedInterface<dim>>();
+            s.level_set_functions.push_back(std::make_unique<AlignedInterface<dim>>());
+            s.rhs_function                 = std::make_unique<RHSFunction8<dim>>();
+            s.interface_boundary_condition = std::make_unique<InterfaceBoundaryCondition8<dim>>();
+            s.outer_boundary_condition     = std::make_unique<OuterBoundaryCondition8<dim>>();
+            s.initial_data                 = std::make_unique<InitialData8<dim>>();
+            s.initial_data_other           = std::make_unique<InitialDataOther8<dim>>();
+            s.derivative_initial_data      = std::make_unique<DerivativeInitialData8<dim>>();
+            s.derivative_initial_data_other= std::make_unique<DerivativeInitialDataOther8<dim>>();
+            s.initial_time                 = 0.0;
+            s.final_time                   = 2.0;
+            s.speed                        = std::make_unique<Speed8<dim>>();
+            s.speed_other                  = std::make_unique<SpeedOther8<dim>>();
+            break;
+        case 9:
+            s.analytical_solution          = std::make_unique<AnalyticalSolution8<dim>>();
+            s.level_set_functions.push_back(std::make_unique<LSF1<dim>>(0));
+            s.level_set_functions.push_back(std::make_unique<LSF1<dim>>(1));
             s.rhs_function                 = std::make_unique<RHSFunction8<dim>>();
             s.interface_boundary_condition = std::make_unique<InterfaceBoundaryCondition8<dim>>();
             s.outer_boundary_condition     = std::make_unique<OuterBoundaryCondition8<dim>>();

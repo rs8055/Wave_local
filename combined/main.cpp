@@ -25,7 +25,6 @@ int main(int argc, char* argv[])
     ("gpm", boost::program_options::value<double>()->default_value(0.43), "Ghost Penalty for Mass Matrix")
     ("gps", boost::program_options::value<double>()->default_value(0.86), "Ghost Penalty for Stiffness Matrix")
     ("np",  boost::program_options::value<double>()->default_value(5), "Nitsche Penalty")
-    // ("tp",  boost::program_options::value<double>()->default_value(5), "Interior Nitsche Penalty")
     ("onc", boost::program_options::value<bool>()->default_value(false),  "Outer Neumann Condition")
     ("inc", boost::program_options::value<bool>()->default_value(false),  "Interior Neumann Condition")
     ("cfl", boost::program_options::value<double>()->default_value(0.1), "CFL Parameter")
@@ -52,7 +51,6 @@ int main(int argc, char* argv[])
   const double       gpm              = vm["gpm"].as<double>();
   const double       gps              = vm["gps"].as<double>();
   const double       np               = vm["np"].as<double>();
-  // const double       tp               = vm["tp"].as<double>();
   const bool         onc              = vm["onc"].as<bool>();
   const bool         inc              = vm["inc"].as<bool>();
   const double       cfl              = vm["cfl"].as<double>();
@@ -76,7 +74,7 @@ int main(int argc, char* argv[])
     Discretization<2> discretization(K,
                                      n_subdivisions_1D,
                                      geometry_left,
-                                     geometry_right, sol.level_set_function.get(), cavity, composite);
+                                     geometry_right, std::move(sol.level_set_functions), cavity, composite);
 
     // ── Matrices ────────────────────────────────────────────────
     StiffnessMatrixOperator<2> stiffness_matrix(discretization,
@@ -97,12 +95,12 @@ int main(int argc, char* argv[])
 
     Output<2> output(discretization, sol.analytical_solution.get());                                         
 
-    TrilinosWrappers::SparseMatrix system_matrix;
-    TrilinosWrappers::SparseMatrix system_matrix_other;
+    std::vector<std::shared_ptr<TrilinosWrappers::SparseMatrix>> system_matrix;
+    std::vector<std::shared_ptr<TrilinosWrappers::SparseMatrix>> system_matrix_other;
     if (pde == 0)
     {
       // Poisson — use stiffness matrix
-      system_matrix.copy_from(stiffness_matrix.get_stiffness_matrix());
+      system_matrix = stiffness_matrix.get_stiffness_matrix();
     }
     else
     {
@@ -110,14 +108,14 @@ int main(int argc, char* argv[])
       {
         MassMatrixOperator<2> mass_matrix(discretization, gpm, NonMatching::LocationToLevelSet::inside);
         MassMatrixOperator<2> mass_matrix_other(discretization, gpm, NonMatching::LocationToLevelSet::outside);
-        system_matrix.copy_from(mass_matrix.get_mass_matrix());
-        system_matrix_other.copy_from(mass_matrix_other.get_mass_matrix());
+        system_matrix = mass_matrix.get_mass_matrix();
+        system_matrix_other = mass_matrix_other.get_mass_matrix();
       }
       else
       {
         // Heat / Wave — use mass matrix
         MassMatrixOperator<2> mass_matrix(discretization, gpm, location);
-        system_matrix.copy_from(mass_matrix.get_mass_matrix());
+        system_matrix = mass_matrix.get_mass_matrix();
       }
     }
 
@@ -128,8 +126,8 @@ int main(int argc, char* argv[])
       SolverComposite<2, decltype(sol)> solver_composite(std::move(sol),
                                       discretization,
                                       stiffness_matrix,
-                                      system_matrix,
-                                      system_matrix_other,
+                                      *system_matrix[0],
+                                      *system_matrix_other[0],
                                       pde,
                                       cfl);
       solver_composite.solve();
@@ -161,7 +159,7 @@ int main(int argc, char* argv[])
       Solver<2, decltype(sol)> solver(std::move(sol),
                                       discretization,
                                       stiffness_matrix,
-                                      system_matrix,
+                                      *system_matrix[0],
                                       pde,
                                       cfl,
                                       location);

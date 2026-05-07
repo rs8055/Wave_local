@@ -17,11 +17,11 @@ public:
     , solution(solution_vector)
     , location(location_in)
     , quadrature_1D(discretization.get_quadrature_1D())
-    , mesh_classifier(discretization.get_mesh_classifier())
+    , mesh_classifiers(discretization.get_mesh_classifiers())
     , fe_collection(discretization.get_fe_collection())
-    , level_set(discretization.get_level_set())
+    , level_sets(discretization.get_level_sets())
     , level_set_dof_handler(discretization.get_level_set_dof_handler())
-    , dof_handler(discretization.get_dof_handler())    
+    , dof_handlers(discretization.get_dof_handlers())    
   {}
 
     double get_l2_error(const double final_time) const {
@@ -48,19 +48,18 @@ public:
     NonMatching::FEValues<dim> non_matching_fe_values(fe_collection,
                                                       quadrature_1D,
                                                       region_update_flags,
-                                                      mesh_classifier,
+                                                      *mesh_classifiers[0],
                                                       level_set_dof_handler,
-                                                      level_set);
+                                                      level_sets[0]);
 
     // const auto analytical_solution=sol.analytical_solution.get();
     analytical_solution->set_time(final_time);
     double                  error_L2_squared = 0;
 
     for (const auto &cell :
-         discretization.get_dof_handler().active_cell_iterators() |
+         dof_handlers[0]->active_cell_iterators() |
            IteratorFilters::LocallyOwnedCell() )//|
-          //  IteratorFilters::ActiveFEIndexEqualTo(Discretization<2>::ActiveFEIndex::lagrange))
-      if (mesh_classifier.location_to_level_set(cell) !=
+      if (mesh_classifiers[0]->location_to_level_set(cell) !=
            inverse_location)
         {
           non_matching_fe_values.reinit(cell);
@@ -85,11 +84,7 @@ public:
                 }
             }
         }
-
-
-    // solution.zero_out_ghost_values();
-
-    error_L2_squared = Utilities::MPI::sum(error_L2_squared, discretization.get_dof_handler().get_communicator());
+    error_L2_squared = Utilities::MPI::sum(error_L2_squared, dof_handlers[0]->get_communicator());
     return std::sqrt(error_L2_squared);
   }
 
@@ -99,12 +94,11 @@ public:
   mutable VectorType solution;
   const NonMatching::LocationToLevelSet location;
   const QGauss<1> &quadrature_1D;
-  const NonMatching::MeshClassifier<dim> &mesh_classifier;
+  const std::vector<std::shared_ptr<NonMatching::MeshClassifier<dim>>> & mesh_classifiers;
   const hp::FECollection<dim> &fe_collection;
-  const VectorType            &level_set;
+  const std::vector<VectorType> &level_sets;
   const DoFHandler<dim>       &level_set_dof_handler;
-  const DoFHandler<dim>       &dof_handler;
-
+  const std::vector<std::shared_ptr<DoFHandler<dim>>> dof_handlers;
 };
 
 #endif

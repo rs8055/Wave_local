@@ -41,19 +41,23 @@ public:
     , quadrature_1D(discretization.get_quadrature_1D())
     , face_quadrature(discretization.get_face_quadrature())
     , constraints(discretization.get_affine_constraints())
-    , mesh_classifier(discretization.get_mesh_classifier())
+    , mesh_classifiers(discretization.get_mesh_classifiers())
     , fe_collection(discretization.get_fe_collection())
-    , level_set(discretization.get_level_set())
+    , level_sets(discretization.get_level_sets())
     , level_set_dof_handler(discretization.get_level_set_dof_handler())
-    , dof_handler(discretization.get_dof_handler())    
+    , dof_handlers(discretization.get_dof_handlers())    
   {}
 
-  const TrilinosWrappers::SparseMatrix &
+  const std::vector<std::shared_ptr<TrilinosWrappers::SparseMatrix>> &
   get_stiffness_matrix() const
   {
-    compute_sparse_matrix();
-
-    return sparse_matrix;
+    block_sparse_matrix.clear();
+    block_sparse_matrix.resize(discretization.get_level_sets().size());
+    for(size_t i = 0; i < discretization.get_level_sets().size(); ++i){
+      block_sparse_matrix[i] = std::make_shared<TrilinosWrappers::SparseMatrix>();
+      compute_sparse_matrix(i, *block_sparse_matrix[i]);
+    }
+    return block_sparse_matrix;
   }
 
   void get_rhs_matrix(VectorType &vec_rhs, const double evaluating_time, const VectorType &previous_u) const
@@ -62,18 +66,17 @@ public:
       (!composite && cavity)
         ? NonMatching::LocationToLevelSet::outside
         : NonMatching::LocationToLevelSet::inside;
-    compute_rhs(vec_rhs, evaluating_time, previous_u,location);
-
-    // return vec_rhs;
+    compute_rhs(0, vec_rhs, evaluating_time, previous_u,location);
   }
 
   void
   get_rhs_matrix(BlockVectorType       &vec_rhs, const double evaluating_time, const BlockVectorType &previous_u) const
   {
 
+    size_t domain_idx = 0;
     previous_u.update_ghost_values();
-    compute_rhs(vec_rhs.block(0), evaluating_time, previous_u.block(0),NonMatching::LocationToLevelSet::inside);
-    compute_rhs(vec_rhs.block(1), evaluating_time, previous_u.block(1),NonMatching::LocationToLevelSet::outside);
+    compute_rhs(0, vec_rhs.block(0), evaluating_time, previous_u.block(0),NonMatching::LocationToLevelSet::inside);
+    compute_rhs(0, vec_rhs.block(1), evaluating_time, previous_u.block(1),NonMatching::LocationToLevelSet::outside);
 
     NonMatching::RegionUpdateFlags region_update_flags;
     region_update_flags.surface = update_values | update_gradients |
@@ -83,15 +86,15 @@ public:
     NonMatching::FEValues<dim> non_matching_fe_values(fe_collection,
                                                       quadrature_1D,
                                                       region_update_flags,
-                                                      mesh_classifier,
+                                                      *mesh_classifiers[domain_idx],
                                                       level_set_dof_handler,
-                                                      level_set);
+                                                      level_sets[domain_idx]);
 
     
 
-    for (const auto &cell : dof_handler.active_cell_iterators())
+    for (const auto &cell : dof_handlers[domain_idx]->active_cell_iterators())
       if (cell->is_locally_owned() &&
-          (mesh_classifier.location_to_level_set(cell) ==
+          (mesh_classifiers[domain_idx]->location_to_level_set(cell) ==
            NonMatching::LocationToLevelSet::intersected))
         {
           non_matching_fe_values.reinit(cell);
@@ -208,19 +211,17 @@ private:
   Function<2> *outer_gradient_function;
   const QGauss<1> &quadrature_1D;
   const QGauss<dim - 1> &face_quadrature;
-  const AffineConstraints<Number> &constraints;
-  const NonMatching::MeshClassifier<dim> &mesh_classifier;
+  const std::vector<AffineConstraints<Number>> &constraints;
+  const std::vector<std::shared_ptr<NonMatching::MeshClassifier<dim>>> & mesh_classifiers;
   const hp::FECollection<dim> &fe_collection;
-  const VectorType            &level_set;
+  const std::vector<VectorType> &level_sets;
   const DoFHandler<dim>       &level_set_dof_handler;
-  const DoFHandler<dim>       &dof_handler;
-
+  const std::vector<std::shared_ptr<DoFHandler<dim>>> dof_handlers;
   mutable TrilinosWrappers::SparsityPattern sparsity_pattern;
-  mutable TrilinosWrappers::SparseMatrix    sparse_matrix;
-  // mutable VectorType vec_rhs;
+  mutable std::vector<std::shared_ptr<TrilinosWrappers::SparseMatrix>> block_sparse_matrix;
 
   void
-  compute_sparse_matrix() const
+  compute_sparse_matrix(size_t & domain_idx, TrilinosWrappers::SparseMatrix &mat) const
   {    
     NonMatching::LocationToLevelSet location =
       (!composite && cavity)
@@ -238,10 +239,10 @@ private:
         return false;
 
       const NonMatching::LocationToLevelSet cell_location =
-        mesh_classifier.location_to_level_set(cell);
+        mesh_classifiers[domain_idx]->location_to_level_set(cell);
 
       const NonMatching::LocationToLevelSet neighbor_location =
-        mesh_classifier.location_to_level_set(cell->neighbor(face_index));
+        mesh_classifiers[domain_idx]->location_to_level_set(cell->neighbor(face_index));
 
       if (cell_location == NonMatching::LocationToLevelSet::intersected &&
           neighbor_location != inverse_location)
@@ -255,8 +256,8 @@ private:
     };
     
 
-    sparsity_pattern.reinit(dof_handler.locally_owned_dofs(),
-                            dof_handler.get_communicator());
+    sparsity_pattern.reinit(dof_handlers[domain_idx]->locally_owned_dofs(),
+                            dof_handlers[domain_idx]->get_communicator());
 
     const unsigned int           n_components = fe_collection.n_components();
     Table<2, DoFTools::Coupling> cell_coupling(n_components, n_components);
@@ -266,9 +267,9 @@ private:
 
     const bool                      keep_constrained_dofs = true;
 
-    DoFTools::make_flux_sparsity_pattern(dof_handler,
+    DoFTools::make_flux_sparsity_pattern(*dof_handlers[domain_idx],
                                          sparsity_pattern,
-                                         constraints,
+                                         constraints[domain_idx],
                                          keep_constrained_dofs,
                                          cell_coupling,
                                          face_coupling,
@@ -276,7 +277,7 @@ private:
                                          face_has_ghost_penalty);
                                          
     sparsity_pattern.compress();
-    sparse_matrix.reinit(sparsity_pattern);
+    mat.reinit(sparsity_pattern);
 
     const unsigned int n_dofs_per_cell = fe_collection[0].dofs_per_cell;
     FullMatrix<double> local_stiffness(n_dofs_per_cell, n_dofs_per_cell);
@@ -306,9 +307,9 @@ private:
     NonMatching::FEValues<dim> non_matching_fe_values(fe_collection,
                                                       quadrature_1D,
                                                       region_update_flags,
-                                                      mesh_classifier,
+                                                      *mesh_classifiers[domain_idx],
                                                       level_set_dof_handler,
-                                                      level_set);
+                                                      level_sets[domain_idx]);
 
     NonMatching::RegionUpdateFlags region_update_flags_face;
     if (location == NonMatching::LocationToLevelSet::inside)
@@ -326,15 +327,15 @@ private:
       fe_collection,
       quadrature_1D,
       region_update_flags_face,
-      mesh_classifier,
+      *mesh_classifiers[domain_idx],
       level_set_dof_handler,
-      level_set);
+      level_sets[domain_idx]);
                                                       
     for (const auto &cell :
-         dof_handler.active_cell_iterators() |
+         dof_handlers[domain_idx]->active_cell_iterators() |
            IteratorFilters::LocallyOwnedCell() )//|
           //  IteratorFilters::ActiveFEIndexEqualTo(Discretization<dim>::ActiveFEIndex::lagrange))
-      if (mesh_classifier.location_to_level_set(cell) !=
+      if (mesh_classifiers[domain_idx]->location_to_level_set(cell) !=
            inverse_location)
         {
           local_stiffness = 0;
@@ -451,7 +452,7 @@ private:
 
           cell->get_dof_indices(local_dof_indices);
 
-          sparse_matrix.add(local_dof_indices, local_stiffness);  
+          mat.add(local_dof_indices, local_stiffness);  
 
           for (const unsigned int f : cell->face_indices())
             if (face_has_ghost_penalty(cell, f))
@@ -500,19 +501,19 @@ private:
                   local_interface_dof_indices =
                     fe_interface_values.get_interface_dof_indices();
 
-                sparse_matrix.add(local_interface_dof_indices,
+                mat.add(local_interface_dof_indices,
                                     local_stabilization);
               }
         }
 
-    sparse_matrix.compress(VectorOperation::add);    
-    for (auto &entry : sparse_matrix)
+    mat.compress(VectorOperation::add);    
+    for (auto &entry : mat)
       if ((entry.row() == entry.column()) && (entry.value() == 0.0))
         entry.value() = 1.0; 
   }
 
   void
-  compute_rhs(VectorType &vec_rhs, const double evaluating_time, const VectorType &previous_u, const NonMatching::LocationToLevelSet location) const
+  compute_rhs(size_t domain_idx, VectorType &vec_rhs, const double evaluating_time, const VectorType &previous_u, const NonMatching::LocationToLevelSet location) const
   {
     const NonMatching::LocationToLevelSet inverse_location =
       (location == NonMatching::LocationToLevelSet::inside) ?
@@ -529,10 +530,10 @@ private:
           return false;
 
         const NonMatching::LocationToLevelSet cell_location =
-          mesh_classifier.location_to_level_set(cell);
+          mesh_classifiers[domain_idx]->location_to_level_set(cell);
 
         const NonMatching::LocationToLevelSet neighbor_location =
-          mesh_classifier.location_to_level_set(cell->neighbor(face_index));
+          mesh_classifiers[domain_idx]->location_to_level_set(cell->neighbor(face_index));
 
         if (cell_location == NonMatching::LocationToLevelSet::intersected &&
             neighbor_location != inverse_location)
@@ -544,7 +545,7 @@ private:
 
         return false;
       };
-    discretization.initialize_dof_vector(vec_rhs); 
+    discretization.initialize_dof_vector(vec_rhs, 0); 
     const unsigned int n_dofs_per_cell = fe_collection[0].dofs_per_cell;
     Vector<double> local_rhs(n_dofs_per_cell);
     std::vector<types::global_dof_index> local_dof_indices(n_dofs_per_cell);
@@ -577,9 +578,9 @@ private:
     NonMatching::FEValues<dim> non_matching_fe_values(fe_collection,
                                                       quadrature_1D,
                                                       region_update_flags,
-                                                      mesh_classifier,
+                                                      *mesh_classifiers[domain_idx],
                                                       level_set_dof_handler,
-                                                      level_set);
+                                                      level_sets[domain_idx]);
 
     NonMatching::RegionUpdateFlags region_update_flags_face;
     if (location == NonMatching::LocationToLevelSet::inside)
@@ -597,16 +598,16 @@ private:
       fe_collection,
       quadrature_1D,
       region_update_flags_face,
-      mesh_classifier,
+      *mesh_classifiers[domain_idx],
       level_set_dof_handler,
-      level_set);                                                  
+      level_sets[domain_idx]);                                                  
 
     for (const auto &cell :
-         dof_handler.active_cell_iterators() |
+         dof_handlers[domain_idx]->active_cell_iterators() |
            IteratorFilters::LocallyOwnedCell() )//|
           //  IteratorFilters::ActiveFEIndexEqualTo(Discretization<dim>::ActiveFEIndex::lagrange))
       // if(cell->is_locally_owned())
-      if (mesh_classifier.location_to_level_set(cell) !=
+      if (mesh_classifiers[domain_idx]->location_to_level_set(cell) !=
            inverse_location)
       {
         local_rhs = 0;

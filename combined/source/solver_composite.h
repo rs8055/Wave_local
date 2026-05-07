@@ -33,6 +33,7 @@ public:
     , stiffness(stiffness)
     , pde_type(pde_type)
     , cfl(cfl)
+    , dof_handlers(discretization.get_dof_handlers())
   {
     system_matrix[0].copy_from(system_matrix_0);
     system_matrix[1].copy_from(system_matrix_1);
@@ -42,7 +43,7 @@ public:
 
     // solution is a 2-block vector; each block lives on the same DoF layout
     VectorType tmp;
-    discretization.initialize_dof_vector(tmp);
+    discretization.initialize_dof_vector(tmp, 0);
     solution.reinit(2);
     solution.block(0) = tmp;
     solution.block(1) = tmp;
@@ -83,6 +84,7 @@ private:
   int                                    pde_type;
   double                                 cfl;
   double                                 actual_final_time = 0.0;
+  const std::vector<std::shared_ptr<DoFHandler<dim>>> dof_handlers;
 
   // One matrix + solver per block
   TrilinosWrappers::SparseMatrix  system_matrix[2];
@@ -95,7 +97,7 @@ private:
   BlockVectorType make_block_vector() const
   {
     VectorType tmp;
-    discretization.initialize_dof_vector(tmp);
+    discretization.initialize_dof_vector(tmp, 0);
     BlockVectorType bv;
     bv.reinit(2);
     bv.block(0) = tmp;
@@ -135,12 +137,12 @@ private:
     {
       // Interpolate initial data into both blocks
       BlockVectorType old_u = make_block_vector();
-      VectorTools::interpolate(discretization.get_dof_handler(),
+      VectorTools::interpolate(*dof_handlers[0],
                                *sol.initial_data, old_u.block(0));
       const Function<dim> *required_initial_data = (sol.initial_data_other != nullptr)
                                                             ? sol.initial_data_other.get()
                                                             : sol.initial_data.get();                                  
-      VectorTools::interpolate(discretization.get_dof_handler(),
+      VectorTools::interpolate(*dof_handlers[0],
                                *required_initial_data, old_u.block(1));
 
       double       t        = sol.initial_time;
@@ -198,9 +200,9 @@ private:
       BlockVectorType old_u = make_block_vector();
       BlockVectorType old_v = make_block_vector();
 
-      VectorTools::interpolate(discretization.get_dof_handler(),
+      VectorTools::interpolate(*dof_handlers[0],
                                *sol.initial_data,            old_u.block(0));
-      VectorTools::interpolate(discretization.get_dof_handler(),
+      VectorTools::interpolate(*dof_handlers[0],
                                *sol.derivative_initial_data, old_v.block(0));
       
       const Function<dim> *required_initial_data = (sol.initial_data_other != nullptr)
@@ -209,9 +211,9 @@ private:
       const Function<dim> *required_derivative_initial_data = (sol.derivative_initial_data_other != nullptr)
                                                             ? sol.derivative_initial_data_other.get()
                                                             : sol.derivative_initial_data.get();                                  
-      VectorTools::interpolate(discretization.get_dof_handler(),
+      VectorTools::interpolate(*dof_handlers[0],
                                *required_initial_data, old_u.block(1));
-      VectorTools::interpolate(discretization.get_dof_handler(),
+      VectorTools::interpolate(*dof_handlers[0],
                                *required_derivative_initial_data, old_v.block(1)); 
 
       double       t  = sol.initial_time;
