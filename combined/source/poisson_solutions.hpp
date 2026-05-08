@@ -19,10 +19,8 @@ using namespace dealii;
 template <int dim>
 struct SolutionSet
 {
-    std::unique_ptr<Function<dim>> speed;
-    std::unique_ptr<Function<dim>> speed_other;
+    std::vector<std::unique_ptr<Function<dim>>> speed;
     std::unique_ptr<Function<dim>> analytical_solution;
-    std::unique_ptr<Function<dim>> level_set_function;
     std::vector<std::unique_ptr<Function<dim>>> level_set_functions;
     std::unique_ptr<Function<dim>> rhs_function;
     std::unique_ptr<Function<dim>> interface_boundary_condition;
@@ -246,21 +244,24 @@ SolutionSet<dim> make_solution(const int choice)
             s.rhs_function                 = std::make_unique<RHSFunction0<dim>>();
             s.interface_boundary_condition = std::make_unique<InterfaceBoundaryCondition0<dim>>();
             s.outer_boundary_condition     = std::make_unique<OuterBoundaryCondition0<dim>>();
-            s.speed                        = std::make_unique<Speed0<dim>>();
+            s.speed.push_back(std::make_unique<Speed0<dim>>());
+            s.speed.push_back(std::make_unique<Speed0<dim>>());
             break;
         case 1:
             s.analytical_solution          = std::make_unique<AnalyticalSolution1<dim>>();
             s.rhs_function                 = std::make_unique<RHSFunction1<dim>>();
             s.interface_boundary_condition = std::make_unique<InterfaceBoundaryCondition1<dim>>();
             s.outer_boundary_condition     = std::make_unique<OuterBoundaryCondition1<dim>>();
-            s.speed                        = std::make_unique<Speed1<dim>>();
+            s.speed.push_back(std::make_unique<Speed1<dim>>());
+            s.speed.push_back(std::make_unique<Speed1<dim>>());
             break;
         case 2:
             s.analytical_solution          = std::make_unique<AnalyticalSolution2<dim>>();
             s.rhs_function                 = std::make_unique<RHSFunction2<dim>>();
             s.interface_boundary_condition = std::make_unique<InterfaceBoundaryCondition2<dim>>();
             s.outer_boundary_condition     = std::make_unique<OuterBoundaryCondition2<dim>>();
-            s.speed                        = std::make_unique<Speed2<dim>>();
+            s.speed.push_back(std::make_unique<Speed2<dim>>());
+            s.speed.push_back(std::make_unique<Speed2<dim>>());
             break;
         default:
             AssertThrow(false, ExcMessage("Unknown solution choice: "

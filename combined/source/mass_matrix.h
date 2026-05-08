@@ -19,11 +19,9 @@ class MassMatrixOperator
 public:
   using VectorType = LinearAlgebra::distributed::Vector<Number>;
 
-  MassMatrixOperator(const Discretization<dim, Number>    &discretization, const double &gpm, const NonMatching::LocationToLevelSet location =
-                       NonMatching::LocationToLevelSet::inside)
+  MassMatrixOperator(const Discretization<dim, Number>    &discretization, const double &gpm)
     : discretization(discretization)
     , ghost_parameter_M(gpm)
-    , location(location)
     , quadrature_1D(discretization.get_quadrature_1D())
     , face_quadrature(discretization.get_face_quadrature())
     , constraints(discretization.get_affine_constraints())
@@ -51,7 +49,6 @@ public:
 private:
   const Discretization<dim, Number>    &discretization;
   double ghost_parameter_M;
-  const NonMatching::LocationToLevelSet location;
   const QGauss<1> &quadrature_1D;
   const QGauss<dim - 1> &face_quadrature;
   const std::vector<AffineConstraints<Number>> &constraints;
@@ -67,10 +64,6 @@ private:
   void
   compute_sparse_matrix(size_t domain_idx, TrilinosWrappers::SparseMatrix &mat) const
   { 
-    const NonMatching::LocationToLevelSet inverse_location =
-      (location == NonMatching::LocationToLevelSet::inside) ?
-        NonMatching::LocationToLevelSet::outside :
-        NonMatching::LocationToLevelSet::inside;
     const auto face_has_ghost_penalty = [&](const auto        &cell,
                                             const unsigned int face_index) {
       if (cell->at_boundary(face_index))
@@ -83,11 +76,11 @@ private:
         mesh_classifiers[domain_idx]->location_to_level_set(cell->neighbor(face_index));
 
       if (cell_location == NonMatching::LocationToLevelSet::intersected &&
-          neighbor_location != inverse_location)
+          neighbor_location != NonMatching::LocationToLevelSet::outside)
         return true;
 
       if (neighbor_location == NonMatching::LocationToLevelSet::intersected &&
-          cell_location != inverse_location)
+          cell_location != NonMatching::LocationToLevelSet::outside)
         return true;
 
       return false;
@@ -112,14 +105,8 @@ private:
     std::vector<types::global_dof_index> local_dof_indices(n_dofs_per_cell);
 
     NonMatching::RegionUpdateFlags region_update_flags;
-    if (location == NonMatching::LocationToLevelSet::inside)
-      region_update_flags.inside = update_values | update_gradients |
+    region_update_flags.inside = update_values | update_gradients |
                                    update_hessians | update_JxW_values | update_quadrature_points;
-    else if (location == NonMatching::LocationToLevelSet::outside)
-      region_update_flags.outside = update_values | update_gradients |
-                                    update_hessians | update_JxW_values | update_quadrature_points;
-    else
-      AssertThrow(false, ExcNotImplemented());
     region_update_flags.surface = update_values | update_gradients | update_hessians | 
                                   update_JxW_values | update_quadrature_points |
                                   update_normal_vectors;                              
@@ -143,8 +130,7 @@ private:
            IteratorFilters::LocallyOwnedCell() |
            IteratorFilters::ActiveFEIndexEqualTo(Discretization<dim>::ActiveFEIndex::lagrange))
       // if (mesh_classifier.location_to_level_set(cell) !=
-      if (mesh_classifiers[domain_idx]->location_to_level_set(cell) !=
-           inverse_location)
+      if (mesh_classifiers[domain_idx]->location_to_level_set(cell) != NonMatching::LocationToLevelSet::outside)
         {
         local_mass = 0;
 
@@ -152,10 +138,7 @@ private:
 
         non_matching_fe_values.reinit(cell);
 
-        const auto &fe_values =
-            (location == NonMatching::LocationToLevelSet::inside) ?
-              non_matching_fe_values.get_inside_fe_values() :
-              non_matching_fe_values.get_outside_fe_values();
+        const auto &fe_values = non_matching_fe_values.get_inside_fe_values() ;
 
         if (fe_values)
           for (const unsigned int q :

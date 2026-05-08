@@ -31,7 +31,7 @@ int main(int argc, char* argv[])
     ("solver", boost::program_options::value<std::string>()->default_value("direct"), "Choice of solver")
     ("lower,l", boost::program_options::value<double>()->default_value(-2.), "Left end point of the domain")
     ("upper,u", boost::program_options::value<double>()->default_value(2.),  "Right end point of the domain")
-    ("cavity", boost::program_options::value<bool>()->default_value(false),  "Whether Cavity")
+    ("di", boost::program_options::value<size_t>()->default_value(0),  "Which Domain")
     ("composite", boost::program_options::value<bool>()->default_value(false),  "Whether Composite")
     ("partition,n", boost::program_options::value<double>()->default_value(8), "Number of partitions");
 
@@ -57,8 +57,8 @@ int main(int argc, char* argv[])
   const unsigned int n_subdivisions_1D = static_cast<unsigned int>(vm["partition"].as<double>());
   const double       geometry_left    = vm["lower"].as<double>();
   const double       geometry_right   = vm["upper"].as<double>();
-  const bool         cavity           = vm["cavity"].as<bool>();
-  const bool         composite           = vm["composite"].as<bool>();
+  const size_t       domain_idx       = vm["di"].as<size_t>();
+  const bool         composite        = vm["composite"].as<bool>();
   const std::string  lin_solver_type  = vm["solver"].as<std::string>();
 
   using VectorType = LinearAlgebra::distributed::Vector<double>;
@@ -66,37 +66,29 @@ int main(int argc, char* argv[])
 
   auto run = [&](auto sol)
   {
-    const NonMatching::LocationToLevelSet location = cavity
-        ? NonMatching::LocationToLevelSet::outside
-        : NonMatching::LocationToLevelSet::inside;
-
     // ── Discretization ─────────────────────────────────────────
     Discretization<2> discretization(K,
                                      n_subdivisions_1D,
                                      geometry_left,
-                                     geometry_right, std::move(sol.level_set_functions), cavity, composite);
+                                     geometry_right, std::move(sol.level_set_functions), composite);
 
     // ── Matrices ────────────────────────────────────────────────
     StiffnessMatrixOperator<2> stiffness_matrix(discretization,
                                              gps,
                                              np,
-                                            //  tp,
                                              sol.rhs_function.get(),
                                              sol.interface_boundary_condition.get(),
                                              sol.outer_boundary_condition.get(),
                                              sol.interface_gradient_function.get(),
                                              sol.outer_gradient_function.get(),
-                                             sol.speed.get(),
-                                             sol.speed_other.get(),
+                                             std::move(sol.speed),
                                              onc,
                                              inc,
-                                             cavity,
                                              composite);
 
-    Output<2> output(discretization, sol.analytical_solution.get());                                         
+    Output<2> output(discretization, sol.analytical_solution.get());  
 
     std::vector<std::shared_ptr<TrilinosWrappers::SparseMatrix>> system_matrix;
-    std::vector<std::shared_ptr<TrilinosWrappers::SparseMatrix>> system_matrix_other;
     if (pde == 0)
     {
       // Poisson — use stiffness matrix
@@ -104,19 +96,9 @@ int main(int argc, char* argv[])
     }
     else
     {
-      if(composite)
-      {
-        MassMatrixOperator<2> mass_matrix(discretization, gpm, NonMatching::LocationToLevelSet::inside);
-        MassMatrixOperator<2> mass_matrix_other(discretization, gpm, NonMatching::LocationToLevelSet::outside);
-        system_matrix = mass_matrix.get_mass_matrix();
-        system_matrix_other = mass_matrix_other.get_mass_matrix();
-      }
-      else
-      {
-        // Heat / Wave — use mass matrix
-        MassMatrixOperator<2> mass_matrix(discretization, gpm, location);
-        system_matrix = mass_matrix.get_mass_matrix();
-      }
+      // Heat/Wave — use mass matrix
+      MassMatrixOperator<2> mass_matrix(discretization, gpm);
+      system_matrix = mass_matrix.get_mass_matrix();
     }
 
     if(composite)
@@ -126,8 +108,7 @@ int main(int argc, char* argv[])
       SolverComposite<2, decltype(sol)> solver_composite(std::move(sol),
                                       discretization,
                                       stiffness_matrix,
-                                      *system_matrix[0],
-                                      *system_matrix_other[0],
+                                      system_matrix,
                                       pde,
                                       cfl);
       solver_composite.solve();
@@ -135,22 +116,18 @@ int main(int argc, char* argv[])
       solution.update_ghost_values();
 
       // ── L2 error ────────────────────────────────────────────────
-      L2ErrorOperator<2> l2_error_inside(discretization,
-                              solver_composite.get_analytical_solution(),
-                              solution.block(0),
-                              NonMatching::LocationToLevelSet::inside);
-      const double error_L2_inside = l2_error_inside.get_l2_error(solver_composite.get_final_time());
-      std::cout << "L2 error Inside: " << error_L2_inside<< std::endl;
-      output.output_result(solution.block(0), NonMatching::LocationToLevelSet::inside, solver_composite.get_final_time(), "solution_inside");
-      L2ErrorOperator<2> l2_error_outside(discretization,
-                              solver_composite.get_analytical_solution(),
-                              solution.block(1),
-                              NonMatching::LocationToLevelSet::outside);
-      const double error_L2_outside = l2_error_outside.get_l2_error(solver_composite.get_final_time());
-      std::cout << "L2 error Outside: " << error_L2_outside<< std::endl;
-      double error_L2 = std::sqrt(std::pow(error_L2_inside,2) + std::pow(error_L2_outside,2));
+      double error_L2 = 0;
+      for(size_t domain_idx = 0; domain_idx < discretization.get_level_sets().size(); ++domain_idx){
+        L2ErrorOperator<2> l2_error(discretization,
+                                solver_composite.get_analytical_solution(),
+                                solution.block(domain_idx),
+                                domain_idx);
+        const double error_L2_domain = l2_error.get_l2_error(solver_composite.get_final_time());
+        std::cout << "L2 error domain ("<<domain_idx<<"): " << error_L2_domain<< std::endl;
+        error_L2 += std::pow(error_L2_domain,2);
+      }
+      error_L2 = std::sqrt(error_L2);
       std::cout << "L2 error: " << error_L2 << std::endl;
-      output.output_result(solution.block(1), NonMatching::LocationToLevelSet::outside, solver_composite.get_final_time(), "solution_outside");
     }
     else
     {
@@ -159,10 +136,10 @@ int main(int argc, char* argv[])
       Solver<2, decltype(sol)> solver(std::move(sol),
                                       discretization,
                                       stiffness_matrix,
-                                      *system_matrix[0],
+                                      system_matrix,
                                       pde,
                                       cfl,
-                                      location);
+                                      domain_idx);
       solver.solve();
       solution = solver.get_solution();                              
       solution.update_ghost_values();
@@ -171,10 +148,10 @@ int main(int argc, char* argv[])
       L2ErrorOperator<2> l2_error(discretization,
                               solver.get_analytical_solution(),
                               solution,
-                              location);
+                              domain_idx);
       const double error_L2 = l2_error.get_l2_error(solver.get_final_time());
       std::cout << "L2 error: " << error_L2<< std::endl;
-      output.output_result(solution, location, solver.get_final_time(),  "solution");
+      output.output_result(solution, domain_idx, solver.get_final_time(),  "solution");
     }
     
   };

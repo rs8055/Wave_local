@@ -51,17 +51,14 @@ public:
     const double                  geometry_left,
     const double                  geometry_right,
     std::vector<std::unique_ptr<Function<dim>>> lsf,
-    const bool                    cavity_in,
     const bool                    composite_in      
   ): tria(MPI_COMM_WORLD)
     , level_set_dof_handler(tria)
-    // , dof_handler(tria)
     , fe_degree(fe_degree)
     , n_subdivisions_1D(n_subdivisions_1D)
     , geometry_left(geometry_left)
     , geometry_right(geometry_right)
     , level_set_functions(std::move(lsf))
-    , cavity(cavity_in)
     , composite(composite_in)
     , quadrature_1D(fe_degree + 1)  
     , face_quadrature(fe_degree + 1)
@@ -75,16 +72,6 @@ public:
 
     // ── Level set ────────────────────────────────────────────────
     level_set_dof_handler.distribute_dofs(FE_Q<dim>(fe_degree));
-
-    NonMatching::LocationToLevelSet location =
-      (!composite && cavity)
-        ? NonMatching::LocationToLevelSet::outside
-        : NonMatching::LocationToLevelSet::inside;
-
-    const NonMatching::LocationToLevelSet inverse_location =
-      (location == NonMatching::LocationToLevelSet::inside) ?
-        NonMatching::LocationToLevelSet::outside :
-        NonMatching::LocationToLevelSet::inside;
     
     const auto level_set_partitioner = std::make_shared<const Utilities::MPI::Partitioner>(
       level_set_dof_handler.locally_owned_dofs(),
@@ -112,20 +99,25 @@ public:
     }
     else
     {
-      level_sets.resize(1);
-      level_sets[0].reinit(level_set_partitioner);
+      level_sets.resize(2);
       const Functions::SignedDistance::Sphere<dim> signed_distance_sphere;
-      VectorTools::interpolate(level_set_dof_handler,
-                              signed_distance_sphere,
-                              level_sets[0]);
-      level_sets[0].update_ghost_values();
+      for (unsigned int i = 0; i < 2; ++i)
+      {
+        level_sets[i].reinit(level_set_partitioner);
+        VectorTools::interpolate(level_set_dof_handler,
+                                signed_distance_sphere,
+                                level_sets[i]);
+        if (i == 1)
+            level_sets[i] *= -1.0;
+        level_sets[i].update_ghost_values();
 
-      mesh_classifiers.push_back(
-        std::make_shared<NonMatching::MeshClassifier<dim>>(
-          level_set_dof_handler, level_sets[0]));
-      mesh_classifiers[0]->reclassify();
+        mesh_classifiers.push_back(
+            std::make_shared<NonMatching::MeshClassifier<dim>>(
+                level_set_dof_handler, level_sets[i]));
+        mesh_classifiers[i]->reclassify();
 
-      dof_handlers.push_back(std::make_unique<DoFHandler<dim>>(tria));
+        dof_handlers.push_back(std::make_unique<DoFHandler<dim>>(tria));
+      }
     }
 
     fe_collection.push_back(FE_Q<dim>(fe_degree));
@@ -148,7 +140,7 @@ public:
           {
             const NonMatching::LocationToLevelSet cell_location =
               mesh_classifiers[i]->location_to_level_set(cell);
-            if (cell_location == inverse_location)
+            if (cell_location == NonMatching::LocationToLevelSet::outside)
               cell->set_active_fe_index(ActiveFEIndex::nothing);
             else
               cell->set_active_fe_index(ActiveFEIndex::lagrange); 
@@ -159,7 +151,7 @@ public:
       constraints[i].close();
       partitioners[i] = std::make_shared<const Utilities::MPI::Partitioner>(
         dof_handlers[i]->locally_owned_dofs(),
-        DoFTools::extract_locally_active_dofs(*dof_handlers[0]),
+        DoFTools::extract_locally_active_dofs(*dof_handlers[i]),
         dof_handlers[i]->get_communicator());
     }
   }

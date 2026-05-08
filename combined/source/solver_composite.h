@@ -24,8 +24,7 @@ public:
   SolverComposite(SolutionSet                     sol,
          const Discretization<dim>      &discretization,
          StiffnessMatrixOperator<dim>   &stiffness,
-         TrilinosWrappers::SparseMatrix &system_matrix_0,
-         TrilinosWrappers::SparseMatrix &system_matrix_1,
+         std::vector<std::shared_ptr<TrilinosWrappers::SparseMatrix>> &system_matrix_in,
          const int                       pde_type,
          const double                    cfl)
     : sol(std::move(sol))
@@ -34,20 +33,14 @@ public:
     , pde_type(pde_type)
     , cfl(cfl)
     , dof_handlers(discretization.get_dof_handlers())
-  {
-    system_matrix[0].copy_from(system_matrix_0);
-    system_matrix[1].copy_from(system_matrix_1);
-
-    solver_direct[0].initialize(system_matrix[0]);
-    solver_direct[1].initialize(system_matrix[1]);
-
-    // solution is a 2-block vector; each block lives on the same DoF layout
-    VectorType tmp;
-    discretization.initialize_dof_vector(tmp, 0);
-    solution.reinit(2);
-    solution.block(0) = tmp;
-    solution.block(1) = tmp;
-    solution.collect_sizes();
+  {        
+    solution.reinit(discretization.get_level_sets().size());
+    for(size_t domain_idx = 0; domain_idx < discretization.get_level_sets().size(); ++domain_idx){
+      system_matrix.push_back(system_matrix_in[domain_idx]);
+      solver_direct.push_back(std::make_shared<TrilinosWrappers::SolverDirect>());
+      solver_direct[domain_idx]->initialize(*system_matrix[domain_idx]);
+      discretization.initialize_dof_vector(solution.block(domain_idx), domain_idx);
+    }
   }
 
   // ── Main entry point ────────────────────────────────────────
@@ -87,22 +80,20 @@ private:
   const std::vector<std::shared_ptr<DoFHandler<dim>>> dof_handlers;
 
   // One matrix + solver per block
-  TrilinosWrappers::SparseMatrix  system_matrix[2];
-  TrilinosWrappers::SolverDirect  solver_direct[2];
+  std::vector<std::shared_ptr<TrilinosWrappers::SparseMatrix>> system_matrix;
+  std::vector<std::shared_ptr<TrilinosWrappers::SolverDirect>> solver_direct;
 
-  // Two-block solution vector
+  // n-block solution vector
   BlockVectorType solution;
 
-  // ── Helper: initialise a zero 2-block vector ─────────────────
+  // ── Helper: initialise a zero n-block vector ─────────────────
   BlockVectorType make_block_vector() const
   {
-    VectorType tmp;
-    discretization.initialize_dof_vector(tmp, 0);
     BlockVectorType bv;
-    bv.reinit(2);
-    bv.block(0) = tmp;
-    bv.block(1) = tmp;
-    bv.collect_sizes();
+    bv.reinit(discretization.get_level_sets().size());
+    for(size_t domain_idx = 0; domain_idx < discretization.get_level_sets().size(); ++domain_idx){
+      discretization.initialize_dof_vector(bv.block(domain_idx), domain_idx);
+    }
     return bv;
   }
   void solve_at_time(const double           t,
@@ -111,12 +102,11 @@ private:
   {
     BlockVectorType rhs = make_block_vector();
 
-    // Stiffness operator fills both blocks (coupling lives here)
     stiffness.get_rhs_matrix(rhs, t, previous_u);
 
-    // Solve each block independently with its own system matrix
-    solver_direct[0].solve(solution_out.block(0), rhs.block(0));
-    solver_direct[1].solve(solution_out.block(1), rhs.block(1));
+    for(size_t domain_idx = 0; domain_idx < discretization.get_level_sets().size(); ++domain_idx){
+      solver_direct[domain_idx]->solve(solution_out.block(domain_idx), rhs.block(domain_idx));
+    }
   }
 
   // ── Poisson ─────────────────────────────────────────────────
@@ -124,8 +114,9 @@ private:
   {
     BlockVectorType dummy = make_block_vector();
     solve_at_time(0.0, dummy, solution);
-    solution.block(0).update_ghost_values();
-    solution.block(1).update_ghost_values();
+    for(size_t domain_idx = 0; domain_idx < discretization.get_level_sets().size(); ++domain_idx){
+      solution.block(domain_idx).update_ghost_values();
+    }
     actual_final_time = 0.0;
   }
 
@@ -135,15 +126,13 @@ private:
     if constexpr (has_initial_data<SolutionSet>::value &&
                   has_final_time<SolutionSet>::value)
     {
-      // Interpolate initial data into both blocks
+      // Interpolate initial data into all blocks
       BlockVectorType old_u = make_block_vector();
-      VectorTools::interpolate(*dof_handlers[0],
-                               *sol.initial_data, old_u.block(0));
-      const Function<dim> *required_initial_data = (sol.initial_data_other != nullptr)
-                                                            ? sol.initial_data_other.get()
-                                                            : sol.initial_data.get();                                  
-      VectorTools::interpolate(*dof_handlers[0],
-                               *required_initial_data, old_u.block(1));
+
+      for(size_t domain_idx = 0; domain_idx < discretization.get_level_sets().size(); ++domain_idx){
+        VectorTools::interpolate(*dof_handlers[domain_idx],
+                               *sol.initial_data[domain_idx].get(), old_u.block(domain_idx));                          
+      }
 
       double       t        = sol.initial_time;
       const double dt       = cfl * std::pow(discretization.get_dx(), 2);
@@ -184,8 +173,9 @@ private:
         t += step;
       }
       actual_final_time = t;
-      solution.block(0).update_ghost_values();
-      solution.block(1).update_ghost_values();
+      for(size_t domain_idx = 0; domain_idx < discretization.get_level_sets().size(); ++domain_idx){
+        solution.block(domain_idx).update_ghost_values();
+      }
     }
   }
 
@@ -200,21 +190,12 @@ private:
       BlockVectorType old_u = make_block_vector();
       BlockVectorType old_v = make_block_vector();
 
-      VectorTools::interpolate(*dof_handlers[0],
-                               *sol.initial_data,            old_u.block(0));
-      VectorTools::interpolate(*dof_handlers[0],
-                               *sol.derivative_initial_data, old_v.block(0));
-      
-      const Function<dim> *required_initial_data = (sol.initial_data_other != nullptr)
-                                                            ? sol.initial_data_other.get()
-                                                            : sol.initial_data.get();
-      const Function<dim> *required_derivative_initial_data = (sol.derivative_initial_data_other != nullptr)
-                                                            ? sol.derivative_initial_data_other.get()
-                                                            : sol.derivative_initial_data.get();                                  
-      VectorTools::interpolate(*dof_handlers[0],
-                               *required_initial_data, old_u.block(1));
-      VectorTools::interpolate(*dof_handlers[0],
-                               *required_derivative_initial_data, old_v.block(1)); 
+      for(size_t domain_idx = 0; domain_idx < discretization.get_level_sets().size(); ++domain_idx){
+        VectorTools::interpolate(*dof_handlers[domain_idx],
+                               *sol.initial_data[domain_idx].get(), old_u.block(domain_idx));
+      VectorTools::interpolate(*dof_handlers[domain_idx],
+                               *sol.derivative_initial_data[domain_idx].get(), old_v.block(domain_idx));                          
+      }
 
       double       t  = sol.initial_time;
       const double dt = cfl * discretization.get_dx();
@@ -268,8 +249,9 @@ private:
         t += step;
       }
       actual_final_time = t;
-      solution.block(0).update_ghost_values();
-      solution.block(1).update_ghost_values();
+      for(size_t domain_idx = 0; domain_idx < discretization.get_level_sets().size(); ++domain_idx){
+        solution.block(domain_idx).update_ghost_values();
+      }
     }
   }
 };

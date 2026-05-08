@@ -41,22 +41,21 @@ public:
   Solver(SolutionSet                     sol,
          const Discretization<dim>      &discretization,
          StiffnessMatrixOperator<dim>   &stiffness,
-         TrilinosWrappers::SparseMatrix &system_matrix,
+         std::vector<std::shared_ptr<TrilinosWrappers::SparseMatrix>> &system_matrix_in,
          const int                       pde_type,
          const double                    cfl,
-         const NonMatching::LocationToLevelSet location = NonMatching::LocationToLevelSet::inside)
+         const size_t &domain_idx
+        )
     : sol(std::move(sol))
     , discretization(discretization)
     , stiffness(stiffness)
     , pde_type(pde_type)
     , cfl(cfl)
-    , location(location)
+    , domain_idx(domain_idx)
     , dof_handlers(discretization.get_dof_handlers())
   {
-    // copy so we own the matrix — avoids dangling reference
-    this->system_matrix.copy_from(system_matrix);
-    solver_direct.initialize(this->system_matrix);
-    discretization.initialize_dof_vector(solution, 0);
+    solver_direct.initialize(*system_matrix_in[domain_idx]);
+    discretization.initialize_dof_vector(solution, domain_idx);
   }
 
   // ── Main entry point ────────────────────────────────────────
@@ -88,9 +87,9 @@ private:
   StiffnessMatrixOperator<dim>          &stiffness;
   int                                    pde_type;
   double                                 cfl;
-  const NonMatching::LocationToLevelSet location;
+  const size_t domain_idx;
   const std::vector<std::shared_ptr<DoFHandler<dim>>> dof_handlers;
-  TrilinosWrappers::SparseMatrix         system_matrix;
+  std::vector<std::shared_ptr<TrilinosWrappers::SparseMatrix>> system_matrix;
   TrilinosWrappers::SolverDirect         solver_direct;
   VectorType                             solution;
   double                                 actual_final_time = 0.0;
@@ -101,9 +100,9 @@ private:
                      VectorType       &solution_out)  // must be non-const ref
   {
     VectorType rhs, tmp;
-    discretization.initialize_dof_vector(rhs, 0);
-    discretization.initialize_dof_vector(tmp, 0);
-    stiffness.get_rhs_matrix(rhs,t,previous_u);
+    discretization.initialize_dof_vector(rhs, domain_idx);
+    discretization.initialize_dof_vector(tmp, domain_idx);
+    stiffness.get_rhs_matrix(domain_idx,rhs,t,previous_u);
 
     solver_direct.solve(solution_out, rhs);
   }
@@ -112,7 +111,7 @@ private:
   void solve_poisson()
   {
     VectorType dummy;
-    discretization.initialize_dof_vector(dummy, 0);
+    discretization.initialize_dof_vector(dummy, domain_idx);
     solve_at_time(0.0, dummy, solution);
     solution.update_ghost_values();
     actual_final_time = 0.0;
@@ -125,13 +124,10 @@ private:
                   has_final_time<SolutionSet>::value)
     {
       VectorType old_u;
-      discretization.initialize_dof_vector(old_u, 0);
-      const Function<dim> *required_initial_data = (location == NonMatching::LocationToLevelSet::outside && 
-                                                            sol.initial_data_other != nullptr)
-                                                            ? sol.initial_data_other.get()
-                                                            : sol.initial_data.get();
-      VectorTools::interpolate(*dof_handlers[0],
-                               *required_initial_data, old_u);
+      discretization.initialize_dof_vector(old_u, domain_idx);
+
+      VectorTools::interpolate(*dof_handlers[domain_idx],
+                               *sol.initial_data[domain_idx].get(), old_u);
 
       double t        = sol.initial_time;
       const double dt = cfl * std::pow(discretization.get_dx(), 2);
@@ -141,11 +137,11 @@ private:
         const double step = std::min(dt, sol.final_time - t);
 
         VectorType k1, k2, k3, k4, tmp;
-        discretization.initialize_dof_vector(k1, 0);
-        discretization.initialize_dof_vector(k2, 0);
-        discretization.initialize_dof_vector(k3, 0);
-        discretization.initialize_dof_vector(k4, 0);
-        discretization.initialize_dof_vector(tmp, 0);
+        discretization.initialize_dof_vector(k1, domain_idx);
+        discretization.initialize_dof_vector(k2, domain_idx);
+        discretization.initialize_dof_vector(k3, domain_idx);
+        discretization.initialize_dof_vector(k4, domain_idx);
+        discretization.initialize_dof_vector(tmp, domain_idx);
 
         // k1
         solve_at_time(t, old_u, k1);
@@ -185,20 +181,13 @@ private:
                   has_derivative_initial_data<SolutionSet>::value)
     {
       VectorType old_u, old_v;
-      discretization.initialize_dof_vector(old_u, 0);
-      discretization.initialize_dof_vector(old_v, 0);
-      const Function<dim> *required_initial_data = (location == NonMatching::LocationToLevelSet::outside && 
-                                                            sol.initial_data_other != nullptr)
-                                                            ? sol.initial_data_other.get()
-                                                            : sol.initial_data.get();
-      const Function<dim> *required_derivative_initial_data = (location == NonMatching::LocationToLevelSet::outside && 
-                                                            sol.derivative_initial_data_other != nullptr)
-                                                            ? sol.derivative_initial_data_other.get()
-                                                            : sol.derivative_initial_data.get();                                  
-      VectorTools::interpolate(*dof_handlers[0],
-                               *required_initial_data, old_u);
-      VectorTools::interpolate(*dof_handlers[0],
-                               *required_derivative_initial_data, old_v);                         
+      discretization.initialize_dof_vector(old_u, domain_idx);
+      discretization.initialize_dof_vector(old_v, domain_idx);    
+
+      VectorTools::interpolate(*dof_handlers[domain_idx],
+                               *sol.initial_data[domain_idx].get(), old_u);
+      VectorTools::interpolate(*dof_handlers[domain_idx],
+                               *sol.derivative_initial_data[domain_idx].get(), old_v);                         
 
       double t        = sol.initial_time;
       const double dt = cfl * discretization.get_dx();
@@ -211,16 +200,16 @@ private:
         VectorType kv1, kv2, kv3, kv4;
         VectorType tmp_u, tmp_v;
 
-        discretization.initialize_dof_vector(ku1, 0);
-        discretization.initialize_dof_vector(ku2, 0);
-        discretization.initialize_dof_vector(ku3, 0);
-        discretization.initialize_dof_vector(ku4, 0);
-        discretization.initialize_dof_vector(kv1, 0);
-        discretization.initialize_dof_vector(kv2, 0);
-        discretization.initialize_dof_vector(kv3, 0);
-        discretization.initialize_dof_vector(kv4, 0);
-        discretization.initialize_dof_vector(tmp_u, 0);
-        discretization.initialize_dof_vector(tmp_v, 0);
+        discretization.initialize_dof_vector(ku1, domain_idx);
+        discretization.initialize_dof_vector(ku2, domain_idx);
+        discretization.initialize_dof_vector(ku3, domain_idx);
+        discretization.initialize_dof_vector(ku4, domain_idx);
+        discretization.initialize_dof_vector(kv1, domain_idx);
+        discretization.initialize_dof_vector(kv2, domain_idx);
+        discretization.initialize_dof_vector(kv3, domain_idx);
+        discretization.initialize_dof_vector(kv4, domain_idx);
+        discretization.initialize_dof_vector(tmp_u, domain_idx);
+        discretization.initialize_dof_vector(tmp_v, domain_idx);
 
         // k1: ku1 = v_n,  kv1 = M^{-1}(f(t) - K*u_n)
         ku1 = old_v;

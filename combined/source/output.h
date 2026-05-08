@@ -30,38 +30,34 @@ public:
     , dof_handlers(discretization.get_dof_handlers())    
   {}
 
-  void output_result(VectorType &solution_vector, const NonMatching::LocationToLevelSet location_in, const double &final_time, const std::string &name) const 
+  void output_result(VectorType &solution_vector, const size_t domain_idx, const double &final_time, const std::string &name) const 
   {
     std::cout << "Writing vtu file" << std::endl;
-    const NonMatching::LocationToLevelSet inverse_location =
-      (location_in == NonMatching::LocationToLevelSet::inside) ?
-        NonMatching::LocationToLevelSet::outside :
-        NonMatching::LocationToLevelSet::inside;
 
     DataOut<dim> data_out;
-    data_out.add_data_vector(*dof_handlers[0], solution_vector, name);
-    data_out.add_data_vector(level_set_dof_handler, level_sets[0], "level_set");
+    data_out.add_data_vector(*dof_handlers[domain_idx], solution_vector, name);
+    data_out.add_data_vector(level_set_dof_handler, level_sets[domain_idx], "level_set");
 
     LinearAlgebra::distributed::Vector<double> as_vector;
     LinearAlgebra::distributed::Vector<double> error_vector;
     as_vector.reinit(solution_vector);
     analytical_solution->set_time(final_time);
 
-    VectorTools::interpolate(*dof_handlers[0],
+    VectorTools::interpolate(*dof_handlers[domain_idx],
                              *analytical_solution,
                              as_vector);
 
     error_vector.reinit(solution_vector);
     error_vector = as_vector;
     error_vector -= solution_vector;
-    data_out.add_data_vector(*dof_handlers[0], error_vector, "error_" + name);                         
+    data_out.add_data_vector(*dof_handlers[domain_idx], error_vector, "error_" + name);                         
 
-    data_out.add_data_vector(*dof_handlers[0], as_vector, "analytical");
+    data_out.add_data_vector(*dof_handlers[domain_idx], as_vector, "analytical");
 
     data_out.set_cell_selection(
-      [this, inverse_location](const typename Triangulation<dim>::cell_iterator &cell) {
+      [this, domain_idx](const typename Triangulation<dim>::cell_iterator &cell) {
         return cell->is_active() && cell->is_locally_owned() &&
-               mesh_classifiers[0]->location_to_level_set(cell) != inverse_location;
+               mesh_classifiers[domain_idx]->location_to_level_set(cell) != NonMatching::LocationToLevelSet::outside;
       });
 
     data_out.build_patches();
