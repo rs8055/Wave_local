@@ -84,7 +84,34 @@ template <int dim>
       const unsigned int domain_index;
   };
 
-// ── Case 3: Ellipse interface ────────────────────────────────────
+  // ── Case 3: Multiple Interface ─────────────────────────
+template <int dim>
+  class MultipleInterface : public Function<dim>
+  {
+  public:
+      MultipleInterface(const unsigned int domain_index)
+          : Function<dim>(1), domain_index(domain_index) {}
+
+      double value(const Point<dim> &p, unsigned int = 0) const override
+      {
+          switch (domain_index)
+          {
+              case 0: return p[0]+0.5;       
+              case 1: return std::max(-p[0]-0.5, p[0]-0.5); 
+              case 2: return 0.5-p[0];    
+              // add more cases here
+              default: AssertThrow(false, ExcMessage("Unknown domain index"));
+                      return 0.0;
+          }
+      }
+
+  private:
+      const unsigned int domain_index;
+  };
+
+
+
+// ── Case 4: Ellipse interface ────────────────────────────────────
 template <int dim>
 class EllipseInterface : public Function<dim>
 {
@@ -108,18 +135,6 @@ private:
 
 template <int dim>
 class Speed0 : public Function<dim>
-{
-public:
-    double value(const Point<dim> &p,
-                 const unsigned int component = 0) const override
-    {
-        (void)component;
-        return 1.0;
-    }
-};
-
-template <int dim>
-class SpeedOther0 : public Function<dim>
 {
 public:
     double value(const Point<dim> &p,
@@ -869,7 +884,7 @@ public:
         const double t = this->get_time();
         // const double k_1 = std::sqrt(7.0/2.0);
         const double k_2 = (1-(0.25)*std::sqrt(7))/(1+(0.25)*std::sqrt(7));
-        if(p[0]+p[1]<1e-6)
+        if(p[0]+p[1]<0)
         {
             return std::cos(p[0] - t) + k_2 * std::cos(-p[1] - t);
         }
@@ -901,7 +916,7 @@ public:
         const double t = this->get_time();
         // const double k_1 = std::sqrt(7.0/2.0);
         const double k_2 = (1-(0.25)*std::sqrt(7))/(1+(0.25)*std::sqrt(7));
-        if(p[0]+p[1]<1e-6)
+        if(p[0]+p[1]<0)
         {
             return std::cos(p[0] - t) + k_2 * std::cos(-p[1] - t);
         }
@@ -922,7 +937,7 @@ public:
         const double t = this->get_time();
         // const double k_1 = std::sqrt(7.0/2.0);
         const double k_2 = (1-(0.25)*std::sqrt(7))/(1+(0.25)*std::sqrt(7));
-        if(p[0]+p[1]<1e-6)
+        if(p[0]+p[1]<0)
         {
             return std::cos(p[0] - t) + k_2 * std::cos(-p[1] - t);
         }
@@ -994,20 +1009,26 @@ SolutionSet<dim> make_solution(const int choice)
     {
         case 0:
             s.analytical_solution          = std::make_unique<AnalyticalSolution0<dim>>();
-            s.level_set_functions.push_back(std::make_unique<AlignedInterface<dim>>(0));
-            s.level_set_functions.push_back(std::make_unique<AlignedInterface<dim>>(1));
+            // s.level_set_functions.push_back(std::make_unique<AlignedInterface<dim>>(0));
+            // s.level_set_functions.push_back(std::make_unique<AlignedInterface<dim>>(1));
+            s.level_set_functions.push_back(std::make_unique<MultipleInterface<dim>>(0));
+            s.level_set_functions.push_back(std::make_unique<MultipleInterface<dim>>(1));
+            s.level_set_functions.push_back(std::make_unique<MultipleInterface<dim>>(2));
             s.interface_gradient_function  = std::make_unique<InterfaceGradientSolution0<dim>>();
             s.rhs_function                 = std::make_unique<RHSFunction0<dim>>();
             s.interface_boundary_condition = std::make_unique<InterfaceBoundaryCondition0<dim>>();
             s.outer_boundary_condition     = std::make_unique<OuterBoundaryCondition0<dim>>();
             s.initial_data.push_back(std::make_unique<InitialData0<dim>>());
             s.initial_data.push_back(std::make_unique<InitialData0<dim>>());
+            s.initial_data.push_back(std::make_unique<InitialData0<dim>>());
+            s.derivative_initial_data.push_back(std::make_unique<DerivativeInitialData0<dim>>());
             s.derivative_initial_data.push_back(std::make_unique<DerivativeInitialData0<dim>>());
             s.derivative_initial_data.push_back(std::make_unique<DerivativeInitialData0<dim>>());
             s.initial_time                 = 0.0;
             s.final_time                   = 2.0 * M_PI / std::sqrt(2.0);
             s.speed.push_back(std::make_unique<Speed0<dim>>());
-            s.speed.push_back(std::make_unique<SpeedOther0<dim>>());
+            s.speed.push_back(std::make_unique<Speed0<dim>>());
+            s.speed.push_back(std::make_unique<Speed0<dim>>());
             break;
         case 1:
             {

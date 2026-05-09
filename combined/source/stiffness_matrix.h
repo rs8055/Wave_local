@@ -86,20 +86,34 @@ public:
 
       
 
-      for (const auto &cell : dof_handlers[domain_idx]->active_cell_iterators())
-        if (cell->is_locally_owned() &&
-            (mesh_classifiers[domain_idx]->location_to_level_set(cell) ==
+      for (const auto &cell_0 : dof_handlers[domain_idx]->active_cell_iterators())
+        if (cell_0->is_locally_owned() &&
+            (mesh_classifiers[domain_idx]->location_to_level_set(cell_0) ==
             NonMatching::LocationToLevelSet::intersected))
           {
-            non_matching_fe_values.reinit(cell);
+            typename DoFHandler<dim>::active_cell_iterator cell_1(
+              &discretization.get_triangulation(),
+              cell_0->level(),
+              cell_0->index(),
+              dof_handlers[domain_idx + 1].get());
+            if (mesh_classifiers[domain_idx + 1]->location_to_level_set(cell_1) ==
+                NonMatching::LocationToLevelSet::outside)
+              continue;
+
+            if (cell_1->active_fe_index() == 
+                Discretization<dim>::ActiveFEIndex::nothing)
+              continue;
+            non_matching_fe_values.reinit(cell_0);
 
             const double cell_side_length =
-              cell->minimum_vertex_distance();
+              cell_0->minimum_vertex_distance();
 
             const unsigned int n_dofs_per_cell = fe_collection[0].dofs_per_cell;
-            Vector<double> local_rhs(n_dofs_per_cell);
-            std::vector<types::global_dof_index> dof_indices(n_dofs_per_cell);
-            cell->get_dof_indices(dof_indices);
+            std::vector<types::global_dof_index> dof_indices_0(n_dofs_per_cell);
+            std::vector<types::global_dof_index> dof_indices_1(n_dofs_per_cell);
+
+            cell_0->get_dof_indices(dof_indices_0);
+            cell_1->get_dof_indices(dof_indices_1);
 
             Vector<Number> cell_vector_0(n_dofs_per_cell);
             Vector<Number> cell_vector_1(n_dofs_per_cell);
@@ -113,25 +127,25 @@ public:
                 std::vector<Number> quadrature_values_0(
                   surface_fe_values.n_quadrature_points);
                 surface_fe_values.get_function_values(previous_u.block(domain_idx),
-                                                      dof_indices,
+                                                      dof_indices_0,
                                                       quadrature_values_0);
 
                 std::vector<Number> quadrature_values_1(
                   surface_fe_values.n_quadrature_points);
                 surface_fe_values.get_function_values(previous_u.block(domain_idx + 1),
-                                                      dof_indices,
+                                                      dof_indices_1,
                                                       quadrature_values_1);
 
                 std::vector<Tensor<1, dim, Number>> quadrature_gradients_0(
                   surface_fe_values.n_quadrature_points);
                 surface_fe_values.get_function_gradients(previous_u.block(domain_idx),
-                                                        dof_indices,
+                                                        dof_indices_0,
                                                         quadrature_gradients_0);
 
                 std::vector<Tensor<1, dim, Number>> quadrature_gradients_1(
                   surface_fe_values.n_quadrature_points);
                 surface_fe_values.get_function_gradients(previous_u.block(domain_idx + 1),
-                                                        dof_indices,
+                                                        dof_indices_1,
                                                         quadrature_gradients_1);
 
 
@@ -180,9 +194,9 @@ public:
                   }
               }
 
-            cell->get_dof_indices(dof_indices);
-            vec_rhs.block(domain_idx).add(dof_indices, cell_vector_0);
-            vec_rhs.block(domain_idx + 1).add(dof_indices, cell_vector_1);
+            // cell->get_dof_indices(dof_indices);
+            vec_rhs.block(domain_idx).add(dof_indices_0, cell_vector_0);
+            vec_rhs.block(domain_idx + 1).add(dof_indices_1, cell_vector_1);
           }
         }
 
@@ -210,7 +224,7 @@ private:
   const std::vector<VectorType> &level_sets;
   const DoFHandler<dim>       &level_set_dof_handler;
   const std::vector<std::shared_ptr<DoFHandler<dim>>> dof_handlers;
-  mutable TrilinosWrappers::SparsityPattern sparsity_pattern;
+  // mutable TrilinosWrappers::SparsityPattern sparsity_pattern;
   mutable std::vector<std::shared_ptr<TrilinosWrappers::SparseMatrix>> block_sparse_matrix;
 
   void
@@ -241,6 +255,7 @@ private:
     };
     
 
+     TrilinosWrappers::SparsityPattern sparsity_pattern;
     sparsity_pattern.reinit(dof_handlers[domain_idx]->locally_owned_dofs(),
                             dof_handlers[domain_idx]->get_communicator());
 

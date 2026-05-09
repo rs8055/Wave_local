@@ -67,6 +67,7 @@ public:
                 }
             }
         }
+    solution.zero_out_ghost_values();
     error_L2_squared = Utilities::MPI::sum(error_L2_squared, dof_handlers[domain_idx]->get_communicator());
     return std::sqrt(error_L2_squared);
   }
@@ -81,7 +82,7 @@ public:
   const hp::FECollection<dim> &fe_collection;
   const std::vector<VectorType> &level_sets;
   const DoFHandler<dim>       &level_set_dof_handler;
-  const std::vector<std::shared_ptr<DoFHandler<dim>>> dof_handlers;
+  const std::vector<std::shared_ptr<DoFHandler<dim>>> &dof_handlers;
 };
 
 #endif

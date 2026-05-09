@@ -125,6 +125,7 @@ int main(int argc, char* argv[])
         const double error_L2_domain = l2_error.get_l2_error(solver_composite.get_final_time());
         std::cout << "L2 error domain ("<<domain_idx<<"): " << error_L2_domain<< std::endl;
         error_L2 += std::pow(error_L2_domain,2);
+        output.output_result(solution.block(domain_idx), domain_idx, solver_composite.get_final_time(),  "solution_domain_" + std::to_string(domain_idx));
       }
       error_L2 = std::sqrt(error_L2);
       std::cout << "L2 error: " << error_L2 << std::endl;

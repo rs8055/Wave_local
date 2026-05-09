@@ -57,7 +57,7 @@ private:
   const std::vector<VectorType> &level_sets;
   const DoFHandler<dim>       &level_set_dof_handler;
   const std::vector<std::shared_ptr<DoFHandler<dim>>> dof_handlers;
-  mutable TrilinosWrappers::SparsityPattern sparsity_pattern;
+  // mutable TrilinosWrappers::SparsityPattern sparsity_pattern;
   mutable std::vector<std::shared_ptr<TrilinosWrappers::SparseMatrix>> block_sparse_matrix;
 
 
@@ -87,6 +87,7 @@ private:
     };
     
 
+     TrilinosWrappers::SparsityPattern sparsity_pattern;
     sparsity_pattern.reinit(dof_handlers[domain_idx]->locally_owned_dofs(),
                             dof_handlers[domain_idx]->get_communicator());
 
