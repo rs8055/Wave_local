@@ -131,20 +131,13 @@ public:
     for(int i = 0; i < n_domains; ++i){
       for (const auto &cell : dof_handlers[i]->active_cell_iterators() |
             IteratorFilters::LocallyOwnedCell())
-        {        
-          // if(composite)
-          // {
-          //   cell->set_active_fe_index(ActiveFEIndex::lagrange);
-          // }
-          // else
-          // {
+        {     
             const NonMatching::LocationToLevelSet cell_location =
               mesh_classifiers[i]->location_to_level_set(cell);
             if (cell_location == NonMatching::LocationToLevelSet::outside)
               cell->set_active_fe_index(ActiveFEIndex::nothing);
             else
               cell->set_active_fe_index(ActiveFEIndex::lagrange); 
-          // }
         }
 
       dof_handlers[i]->distribute_dofs(fe_collection);
