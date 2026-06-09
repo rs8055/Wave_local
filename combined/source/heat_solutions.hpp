@@ -4,6 +4,7 @@
 #include <deal.II/base/function.h>
 #include <deal.II/base/point.h>
 #include <deal.II/base/tensor.h>
+#include <boost/math/special_functions/bessel.hpp>
 #include <memory>
 #include <cmath>
 
@@ -220,7 +221,7 @@ public:
         (void)component;
         const double t     = this->get_time();
         const double alpha = 2.4048255577;
-        return std::cyl_bessel_j(0, alpha * p.norm()) * std::exp(-2 * t);
+        return boost::math::cyl_bessel_j(0, alpha * p.norm()) * std::exp(-2 * t);
     }
 };
 
@@ -234,7 +235,7 @@ public:
         (void)component;
         const double t     = this->get_time();
         const double alpha = 2.4048255577;
-        return (std::pow(alpha,2)-2.0) * std::cyl_bessel_j(0, alpha * p.norm()) * std::exp(-2 * t);
+        return (std::pow(alpha,2)-2.0) * boost::math::cyl_bessel_j(0, alpha * p.norm()) * std::exp(-2 * t);
     }
 };
 
@@ -248,7 +249,7 @@ public:
         (void)component;
         const double t     = this->get_time();
         const double alpha = 2.4048255577;
-        return std::cyl_bessel_j(0, alpha * p.norm()) * std::exp(-2 * t);
+        return boost::math::cyl_bessel_j(0, alpha * p.norm()) * std::exp(-2 * t);
     }
 };
 
@@ -262,7 +263,7 @@ public:
         (void)component;
         const double t     = this->get_time();
         const double alpha = 2.4048255577;
-        return std::cyl_bessel_j(0, alpha * p.norm()) * std::exp(-2 * t);
+        return boost::math::cyl_bessel_j(0, alpha * p.norm()) * std::exp(-2 * t);
     }
 };
 
@@ -275,7 +276,7 @@ public:
     {
         (void)component;
         const double alpha = 2.4048255577;
-        return std::cyl_bessel_j(0, alpha * p.norm());
+        return boost::math::cyl_bessel_j(0, alpha * p.norm());
     }
 };
 

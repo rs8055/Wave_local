@@ -4,6 +4,7 @@
 #include <deal.II/base/function.h>
 #include <deal.II/base/point.h>
 #include <deal.II/base/tensor.h>
+#include <boost/math/special_functions/bessel.hpp>
 #include <memory>
 #include <cmath>
 
@@ -185,7 +186,7 @@ public:
     {
         (void)component;
         const double alpha = 2.4048255577;
-        return std::cyl_bessel_j(0, alpha * p.norm());
+        return boost::math::cyl_bessel_j(0, alpha * p.norm());
     }
 };
 
@@ -198,7 +199,7 @@ public:
     {
         (void)component;
         const double alpha = 2.4048255577;
-        return (std::pow(alpha,2)) * std::cyl_bessel_j(0, alpha * p.norm());
+        return (std::pow(alpha,2)) * boost::math::cyl_bessel_j(0, alpha * p.norm());
     }
 };
 
@@ -211,7 +212,7 @@ public:
     {
         (void)component;
         const double alpha = 2.4048255577;
-        return std::cyl_bessel_j(0, alpha * p.norm());
+        return boost::math::cyl_bessel_j(0, alpha * p.norm());
     }
 };
 
@@ -224,7 +225,7 @@ public:
     {
         (void)component;
         const double alpha = 2.4048255577;
-        return std::cyl_bessel_j(0, alpha * p.norm());
+        return boost::math::cyl_bessel_j(0, alpha * p.norm());
     }
 };
 
