@@ -4,6 +4,8 @@
 #include <deal.II/base/function.h>
 #include <deal.II/base/point.h>
 #include <deal.II/base/tensor.h>
+#include <boost/math/special_functions/bessel.hpp>
+
 #include <memory>
 #include <cmath>
 
@@ -305,7 +307,7 @@ public:
         (void)component;
         const double t     = this->get_time();
         const double alpha = 2.4048255577;
-        return std::cyl_bessel_j(0, alpha * p.norm()) * std::cos(alpha * t);
+        return boost::math::cyl_bessel_j(0, alpha * p.norm()) * std::cos(alpha * t);
     }
 };
 
@@ -331,7 +333,7 @@ public:
         (void)component;
         const double t     = this->get_time();
         const double alpha = 2.4048255577;
-        return std::cyl_bessel_j(0, alpha * p.norm()) * std::cos(alpha * t);
+        return boost::math::cyl_bessel_j(0, alpha * p.norm()) * std::cos(alpha * t);
     }
 };
 
@@ -345,7 +347,7 @@ public:
         (void)component;
         const double t     = this->get_time();
         const double alpha = 2.4048255577;
-        return std::cyl_bessel_j(0, alpha * p.norm()) * std::cos(alpha * t);
+        return boost::math::cyl_bessel_j(0, alpha * p.norm()) * std::cos(alpha * t);
     }
 };
 
@@ -358,7 +360,7 @@ public:
     {
         (void)component;
         const double alpha = 2.4048255577;
-        return std::cyl_bessel_j(0, alpha * p.norm());
+        return boost::math::cyl_bessel_j(0, alpha * p.norm());
     }
 };
 
@@ -413,7 +415,7 @@ public:
         (void)component;
         const double t     = this->get_time();
         const double alpha = 2.4048255577;
-        return std::cyl_bessel_j(0, alpha * p.norm()) * std::cos(2 * alpha * t);
+        return boost::math::cyl_bessel_j(0, alpha * p.norm()) * std::cos(2 * alpha * t);
     }
 };
 
@@ -439,7 +441,7 @@ public:
         (void)component;
         const double t     = this->get_time();
         const double alpha = 2.4048255577;
-        return std::cyl_bessel_j(0, alpha * p.norm()) * std::cos(2 * alpha * t);
+        return boost::math::cyl_bessel_j(0, alpha * p.norm()) * std::cos(2 * alpha * t);
     }
 };
 
@@ -453,7 +455,7 @@ public:
         (void)component;
         const double t     = this->get_time();
         const double alpha = 2.4048255577;
-        return std::cyl_bessel_j(0, alpha * p.norm()) * std::cos(2 * alpha * t);
+        return boost::math::cyl_bessel_j(0, alpha * p.norm()) * std::cos(2 * alpha * t);
     }
 };
 
@@ -466,7 +468,7 @@ public:
     {
         (void)component;
         const double alpha = 2.4048255577;
-        return std::cyl_bessel_j(0, alpha * p.norm());
+        return boost::math::cyl_bessel_j(0, alpha * p.norm());
     }
 };
 
@@ -522,7 +524,7 @@ public:
         (void)component;
         const double t     = this->get_time();
         const double alpha = 2.4048255577;
-        return std::cyl_bessel_j(0, alpha * p.norm()) * std::cos(2 * alpha * t);
+        return boost::math::cyl_bessel_j(0, alpha * p.norm()) * std::cos(2 * alpha * t);
     }
 };
 
@@ -540,8 +542,8 @@ public:
 
         const double r = p.norm();
 
-        const double J0 = std::cyl_bessel_j(0, alpha * r);
-        const double J1 = std::cyl_bessel_j(1, alpha * r);
+        const double J0 = boost::math::cyl_bessel_j(0, alpha * r);
+        const double J1 = boost::math::cyl_bessel_j(1, alpha * r);
 
         const double x_over_r = (r > 1e-12 ? p[0] / r : 0.0);
 
@@ -565,7 +567,7 @@ public:
         (void)component;
         const double t     = this->get_time();
         const double alpha = 2.4048255577;
-        return std::cyl_bessel_j(0, alpha * p.norm()) * std::cos(2 * alpha * t);
+        return boost::math::cyl_bessel_j(0, alpha * p.norm()) * std::cos(2 * alpha * t);
     }
 };
 
@@ -579,7 +581,7 @@ public:
         (void)component;
         const double t     = this->get_time();
         const double alpha = 2.4048255577;
-        return std::cyl_bessel_j(0, alpha * p.norm()) * std::cos(2 * alpha * t);
+        return boost::math::cyl_bessel_j(0, alpha * p.norm()) * std::cos(2 * alpha * t);
     }
 };
 
@@ -592,7 +594,7 @@ public:
     {
         (void)component;
         const double alpha = 2.4048255577;
-        return std::cyl_bessel_j(0, alpha * p.norm());
+        return boost::math::cyl_bessel_j(0, alpha * p.norm());
     }
 };
 
@@ -1218,9 +1220,9 @@ public:
         std::complex<double> factor = (n == 0) ? 1.0 : 2.0 * std::pow(-I, n);
         
         if (r > 1.0) {
-            u_spatial += (factor * std::cyl_bessel_j(n, g * r) + An * hankel2(n, g * r)) * std::cos(n * theta);
+            u_spatial += (factor * boost::math::cyl_bessel_j(n, g * r) + An * hankel2(n, g * r)) * std::cos(n * theta);
         } else {
-            u_spatial += Bn * std::cyl_bessel_j(n, gp * r) * std::cos(n * theta);
+            u_spatial += Bn * boost::math::cyl_bessel_j(n, gp * r) * std::cos(n * theta);
         }
     }
     return (u_spatial * std::exp(I * omega * t)).real();
@@ -1228,7 +1230,7 @@ public:
 
 private:
   std::complex<double> hankel2(int n, double z) const {
-    return {std::cyl_bessel_j(n, z), -std::cyl_neumann(n, z)};
+    return {boost::math::cyl_bessel_j(n, z), -boost::math::cyl_neumann(n, z)};
   }
 
   void calculate_coeffs(int n, double g, double gp, double c, double cp, 
@@ -1236,13 +1238,13 @@ private:
     const std::complex<double> I(0.0, 1.0);
     std::complex<double> pre = (n == 0) ? 1.0 : 2.0 * std::pow(-I, n);
 
-    double jn_g = std::cyl_bessel_j(n, g), jn_gp = std::cyl_bessel_j(n, gp);
+    double jn_g = boost::math::cyl_bessel_j(n, g), jn_gp = boost::math::cyl_bessel_j(n, gp);
     std::complex<double> hn_g = hankel2(n, g);
 
     // Derivatives via recurrence: J'n(x) = 0.5*(Jn-1 - Jn+1)
     auto get_dJ = [](int order, double x) {
-        if (order == 0) return -std::cyl_bessel_j(1, x);
-        return 0.5 * (std::cyl_bessel_j(order - 1, x) - std::cyl_bessel_j(order + 1, x));
+        if (order == 0) return -boost::math::cyl_bessel_j(1, x);
+        return 0.5 * (boost::math::cyl_bessel_j(order - 1, x) - boost::math::cyl_bessel_j(order + 1, x));
     };
 
     auto get_dH = [this](int order, double x) {
@@ -1294,14 +1296,14 @@ public:
         std::complex<double> An, Bn;
         calculate_coeffs(n, g, gp, c, c_p, An, Bn);
         
-        u_spatial += Bn * std::cyl_bessel_j(n, gp * r) * std::cos(n * theta);
+        u_spatial += Bn * boost::math::cyl_bessel_j(n, gp * r) * std::cos(n * theta);
     }
     return (u_spatial).real();
   }
 
 private:
   std::complex<double> hankel2(int n, double z) const {
-    return {std::cyl_bessel_j(n, z), -std::cyl_neumann(n, z)};
+    return {boost::math::cyl_bessel_j(n, z), -boost::math::cyl_neumann(n, z)};
   }
 
   void calculate_coeffs(int n, double g, double gp, double c, double cp, 
@@ -1309,13 +1311,13 @@ private:
     const std::complex<double> I(0.0, 1.0);
     std::complex<double> pre = (n == 0) ? 1.0 : 2.0 * std::pow(-I, n);
 
-    double jn_g = std::cyl_bessel_j(n, g), jn_gp = std::cyl_bessel_j(n, gp);
+    double jn_g = boost::math::cyl_bessel_j(n, g), jn_gp = boost::math::cyl_bessel_j(n, gp);
     std::complex<double> hn_g = hankel2(n, g);
 
     // Derivatives via recurrence: J'n(x) = 0.5*(Jn-1 - Jn+1)
     auto get_dJ = [](int order, double x) {
-        if (order == 0) return -std::cyl_bessel_j(1, x);
-        return 0.5 * (std::cyl_bessel_j(order - 1, x) - std::cyl_bessel_j(order + 1, x));
+        if (order == 0) return -boost::math::cyl_bessel_j(1, x);
+        return 0.5 * (boost::math::cyl_bessel_j(order - 1, x) - boost::math::cyl_bessel_j(order + 1, x));
     };
 
     auto get_dH = [this](int order, double x) {
@@ -1357,14 +1359,14 @@ public:
         calculate_coeffs(n, g, gp, c, c_p, An, Bn);
         
         std::complex<double> factor = (n == 0) ? 1.0 : 2.0 * std::pow(-I, n);
-        u_spatial += (factor * std::cyl_bessel_j(n, g * r) + An * hankel2(n, g * r)) * std::cos(n * theta);
+        u_spatial += (factor * boost::math::cyl_bessel_j(n, g * r) + An * hankel2(n, g * r)) * std::cos(n * theta);
     }
     return (u_spatial).real();
   }
 
 private:
   std::complex<double> hankel2(int n, double z) const {
-    return {std::cyl_bessel_j(n, z), -std::cyl_neumann(n, z)};
+    return {boost::math::cyl_bessel_j(n, z), -boost::math::cyl_neumann(n, z)};
   }
 
   void calculate_coeffs(int n, double g, double gp, double c, double cp, 
@@ -1372,13 +1374,13 @@ private:
     const std::complex<double> I(0.0, 1.0);
     std::complex<double> pre = (n == 0) ? 1.0 : 2.0 * std::pow(-I, n);
 
-    double jn_g = std::cyl_bessel_j(n, g), jn_gp = std::cyl_bessel_j(n, gp);
+    double jn_g = boost::math::cyl_bessel_j(n, g), jn_gp = boost::math::cyl_bessel_j(n, gp);
     std::complex<double> hn_g = hankel2(n, g);
 
     // Derivatives via recurrence: J'n(x) = 0.5*(Jn-1 - Jn+1)
     auto get_dJ = [](int order, double x) {
-        if (order == 0) return -std::cyl_bessel_j(1, x);
-        return 0.5 * (std::cyl_bessel_j(order - 1, x) - std::cyl_bessel_j(order + 1, x));
+        if (order == 0) return -boost::math::cyl_bessel_j(1, x);
+        return 0.5 * (boost::math::cyl_bessel_j(order - 1, x) - boost::math::cyl_bessel_j(order + 1, x));
     };
 
     auto get_dH = [this](int order, double x) {
@@ -1419,14 +1421,14 @@ public:
         std::complex<double> An, Bn;
         calculate_coeffs(n, g, gp, c, c_p, An, Bn);
         
-        u_spatial += Bn * std::cyl_bessel_j(n, gp * r) * std::cos(n * theta);
+        u_spatial += Bn * boost::math::cyl_bessel_j(n, gp * r) * std::cos(n * theta);
     }
     return (I * omega * u_spatial).real();
   }
 
 private:
   std::complex<double> hankel2(int n, double z) const {
-    return {std::cyl_bessel_j(n, z), -std::cyl_neumann(n, z)};
+    return {boost::math::cyl_bessel_j(n, z), -boost::math::cyl_neumann(n, z)};
   }
 
   void calculate_coeffs(int n, double g, double gp, double c, double cp, 
@@ -1434,13 +1436,13 @@ private:
     const std::complex<double> I(0.0, 1.0);
     std::complex<double> pre = (n == 0) ? 1.0 : 2.0 * std::pow(-I, n);
 
-    double jn_g = std::cyl_bessel_j(n, g), jn_gp = std::cyl_bessel_j(n, gp);
+    double jn_g = boost::math::cyl_bessel_j(n, g), jn_gp = boost::math::cyl_bessel_j(n, gp);
     std::complex<double> hn_g = hankel2(n, g);
 
     // Derivatives via recurrence: J'n(x) = 0.5*(Jn-1 - Jn+1)
     auto get_dJ = [](int order, double x) {
-        if (order == 0) return -std::cyl_bessel_j(1, x);
-        return 0.5 * (std::cyl_bessel_j(order - 1, x) - std::cyl_bessel_j(order + 1, x));
+        if (order == 0) return -boost::math::cyl_bessel_j(1, x);
+        return 0.5 * (boost::math::cyl_bessel_j(order - 1, x) - boost::math::cyl_bessel_j(order + 1, x));
     };
 
     auto get_dH = [this](int order, double x) {
@@ -1482,14 +1484,14 @@ public:
         calculate_coeffs(n, g, gp, c, c_p, An, Bn);
         
         std::complex<double> factor = (n == 0) ? 1.0 : 2.0 * std::pow(-I, n);
-        u_spatial += (factor * std::cyl_bessel_j(n, g * r) + An * hankel2(n, g * r)) * std::cos(n * theta);
+        u_spatial += (factor * boost::math::cyl_bessel_j(n, g * r) + An * hankel2(n, g * r)) * std::cos(n * theta);
     }
     return (I * omega * u_spatial).real();
   }
 
 private:
   std::complex<double> hankel2(int n, double z) const {
-    return {std::cyl_bessel_j(n, z), -std::cyl_neumann(n, z)};
+    return {boost::math::cyl_bessel_j(n, z), -boost::math::cyl_neumann(n, z)};
   }
 
   void calculate_coeffs(int n, double g, double gp, double c, double cp, 
@@ -1497,13 +1499,13 @@ private:
     const std::complex<double> I(0.0, 1.0);
     std::complex<double> pre = (n == 0) ? 1.0 : 2.0 * std::pow(-I, n);
 
-    double jn_g = std::cyl_bessel_j(n, g), jn_gp = std::cyl_bessel_j(n, gp);
+    double jn_g = boost::math::cyl_bessel_j(n, g), jn_gp = boost::math::cyl_bessel_j(n, gp);
     std::complex<double> hn_g = hankel2(n, g);
 
     // Derivatives via recurrence: J'n(x) = 0.5*(Jn-1 - Jn+1)
     auto get_dJ = [](int order, double x) {
-        if (order == 0) return -std::cyl_bessel_j(1, x);
-        return 0.5 * (std::cyl_bessel_j(order - 1, x) - std::cyl_bessel_j(order + 1, x));
+        if (order == 0) return -boost::math::cyl_bessel_j(1, x);
+        return 0.5 * (boost::math::cyl_bessel_j(order - 1, x) - boost::math::cyl_bessel_j(order + 1, x));
     };
 
     auto get_dH = [this](int order, double x) {
